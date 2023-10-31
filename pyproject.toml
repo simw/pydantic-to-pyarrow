@@ -1,0 +1,87 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+
+[tool.poetry]
+name = "pydantic_to_pyarrow"
+version = "0.0.1"
+description = ""
+authors = ["simw"]
+readme = "README.md"
+packages = [{include = "pydantic_to_pyarrow", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+pydantic = "^2.4.2"
+pyarrow = "^13.0.0"
+typing-extensions = "^4.8.0"
+
+
+[tool.poetry.group.lint.dependencies]
+black = "^23.9.1"
+ruff = "^0.1.3"
+mypy = "^1.6.0"
+
+
+[tool.poetry.group.test.dependencies]
+pytest = "^7.4.2"
+coverage = "^7.3.2"
+
+
+[tool.mypy]
+strict = true
+
+
+[tool.black]
+color = true
+line-length = 88
+target-version = ["py38"]
+
+
+[tool.ruff]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "C",  # flake8-comprehensions
+    "B",  # flake8-bugbear
+    "UP",  # pyupgrade
+]
+ignore = []
+line-length = 88
+indent-width = 4
+target-version = "py38"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.isort]
+known-first-party = ["pydantic_to_pyarrow"]
+
+
+[tool.pytest.ini_options]
+testpaths = "tests"
+xfail_strict = true
+filterwarnings = [
+    "error"
+]
+
+
+[tool.coverage.run]
+source = ["src/pydantic_to_pyarrow"]
+branch = true
+
+[tool.coverage.report]
+precision = 2
+exclude_lines = [
+    'pragma: no cover',
+    'raise NotImplementedError',
+    'if TYPE_CHECKING:',
+    '@overload',
+]
+fail_under = 100

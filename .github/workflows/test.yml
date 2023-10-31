@@ -1,0 +1,59 @@
+name: Lint and Test
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+    - name: Bootstrap poetry
+      run: curl -sSL https://install.python-poetry.org | python - -y
+
+    - name: Set up cache
+      uses: actions/cache@v3
+      id: cache
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ steps.full-python-version.outputs.version }}-${{ hashFiles('**/poetry.lock') }}
+
+    - name: Lint
+      run: make lint
+
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Bootstrap poetry
+      run: curl -sSL https://install.python-poetry.org | python - -y
+
+    - name: Configure poetry
+      run: poetry config virtualenvs.in-project true
+
+    - name: Set up cache
+      uses: actions/cache@v3
+      id: cache
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ steps.full-python-version.outputs.version }}-${{ hashFiles('**/poetry.lock') }}
+
+    - name: Run tests
+      run: make test
