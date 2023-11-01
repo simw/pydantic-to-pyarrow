@@ -6,7 +6,7 @@ from typing import Any, Deque, Dict, List, Optional, Tuple
 import pyarrow as pa  # type: ignore
 import pyarrow.parquet as pq  # type: ignore
 import pytest
-from pydantic import BaseModel, NaiveDatetime
+from pydantic import AwareDatetime, BaseModel, NaiveDatetime
 
 from pydantic_to_pyarrow import SchemaCreationError, get_pyarrow_schema
 
@@ -30,48 +30,6 @@ def _write_pq_and_read(
 
     new_objs = new_tbl.to_pylist()
     return new_tbl.schema, new_objs
-
-
-def test_some_types_dont_read_as_written_part1() -> None:
-    """
-    The pyarrow timestampe with precision of seconds is not
-    supported by parquet files, only ms level precision.
-    """
-    schema = pa.schema(
-        [
-            pa.field("a", pa.timestamp("s"), nullable=True),
-        ]
-    )
-    objs = [{"a": datetime.datetime(2020, 1, 1)}]
-    new_schema, new_objs = _write_pq_and_read(objs, schema)
-    assert new_objs == objs
-    assert len(new_schema) == 1
-    assert new_schema[0] == pa.field("a", pa.timestamp("ms"), nullable=True)
-    with pytest.raises(AssertionError):
-        assert new_schema == schema
-
-
-def test_some_types_dont_read_as_written_part2() -> None:
-    """
-    While parquet files should correctly convert from the python timezone
-    aware datetime to an 'instant', it doesn't record the timezone in the
-    parquet file. Hence, when it's read back, we don't get exactly the
-    same datetime object.
-    """
-    schema = pa.schema(
-        [
-            pa.field("a", pa.timestamp("ms"), nullable=True),
-        ]
-    )
-    tz = datetime.timezone(datetime.timedelta(hours=5))
-    objs = [{"a": datetime.datetime(2020, 1, 1, 1, 0, 0, tzinfo=tz)}]
-    new_schema, new_objs = _write_pq_and_read(objs, schema)
-    assert new_schema == schema
-    # The tzinfo is lost, and the datetime is converted to UTC
-    # which pushes it back into the previous year.
-    assert new_objs[0]["a"] == datetime.datetime(2019, 12, 31, 20, 0, 0)
-    with pytest.raises(AssertionError):
-        assert new_objs == objs
 
 
 def test_simple_types() -> None:
@@ -133,7 +91,10 @@ def test_nullable_types() -> None:
 
 
 def test_date_types_with_no_tz() -> None:
-    """ """
+    """
+    Dates and naive datetimes are ok to convert to pyarrow and parquet
+    without worrying about timezone data.
+    """
 
     class DateModel(BaseModel):
         a: datetime.date
@@ -158,3 +119,78 @@ def test_date_types_with_no_tz() -> None:
     new_schema, new_objs = _write_pq_and_read(objs, expected)
     assert new_schema == expected
     assert new_objs == objs
+
+
+def test_date_types_with_tz() -> None:
+    """
+    datetime.datetime might have timezone data, and AwareDatetime
+    certainly should - hence, need to be careful when converting
+    to pyarrow and parquet.
+    """
+
+    class DateModel(BaseModel):
+        a: datetime.datetime
+        b: AwareDatetime
+
+    expected = pa.schema(
+        [
+            pa.field("a", pa.timestamp("ms"), nullable=False),
+            pa.field("b", pa.timestamp("ms"), nullable=False),
+        ]
+    )
+
+    actual = get_pyarrow_schema(DateModel, allow_losing_tz=True)
+    assert actual == expected
+
+    tz = datetime.timezone(datetime.timedelta(hours=5))
+    objs = [
+        {
+            "a": datetime.datetime(2020, 1, 1, 1, 0, 0),
+            "b": datetime.datetime(2020, 1, 1, 2, 0, 0, tzinfo=tz),
+        },
+        {
+            "a": datetime.datetime(2020, 1, 1, 1, 0, 0, tzinfo=tz),
+            "b": datetime.datetime(2020, 1, 1, 6, 0, 0, tzinfo=tz),
+        },
+    ]
+    new_schema, new_objs = _write_pq_and_read(objs, expected)
+    assert new_schema == expected
+    # pyarrow converts to UTC, so the datetimes should be different
+    # Winter => New York is UTC-5
+    expected_objs = [
+        {
+            "a": datetime.datetime(2020, 1, 1, 1, 0, 0),
+            "b": datetime.datetime(2019, 12, 31, 21, 0, 0),
+        },
+        {
+            "a": datetime.datetime(2019, 12, 31, 20, 0, 0),
+            "b": datetime.datetime(2020, 1, 1, 1, 0, 0),
+        },
+    ]
+    assert new_objs == expected_objs
+
+
+def test_datetime_without_flag() -> None:
+    """
+    datetime.datetime might have timezone data, hence reject it
+    without the extra allow_losing_tz flag.
+    """
+
+    class DateModel(BaseModel):
+        a: datetime.datetime
+
+    with pytest.raises(SchemaCreationError):
+        get_pyarrow_schema(DateModel)
+
+
+def test_awaredatetime_without_flag() -> None:
+    """
+    datetime.datetime might have timezone data, hence reject it
+    without the extra allow_losing_tz flag.
+    """
+
+    class DateModel(BaseModel):
+        a: AwareDatetime
+
+    with pytest.raises(SchemaCreationError):
+        get_pyarrow_schema(DateModel)
