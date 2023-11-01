@@ -1,12 +1,17 @@
 import datetime
 import types
-from typing import Any, Type, TypeVar, Union, cast
+from decimal import Decimal
+from typing import Any, List, Type, TypeVar, Union, cast
 
 import pyarrow as pa  # type: ignore
 from pydantic import AwareDatetime, BaseModel, NaiveDatetime
-from typing_extensions import get_args, get_origin
+from typing_extensions import Annotated, get_args, get_origin
 
 BaseModelType = TypeVar("BaseModelType", bound=BaseModel)
+
+
+class SchemaCreationError(Exception):
+    """Error when creating pyarrow schema."""
 
 
 FIELD_MAP = {
@@ -29,8 +34,22 @@ LOSING_TZ_TYPES = {
 }
 
 
-class SchemaCreationError(Exception):
-    """Error when creating pyarrow schema."""
+def _get_decimal_type(metadata: List[Any]) -> pa.DataType:
+    general_metadata = None
+    for el in metadata:
+        if hasattr(el, "max_digits") and hasattr(el, "decimal_places"):
+            general_metadata = el
+    if general_metadata is None:
+        raise SchemaCreationError(
+            "Decimal type needs annotation setting max_digits and decimal_places"
+        )
+
+    return pa.decimal128(general_metadata.max_digits, general_metadata.decimal_places)
+
+
+TYPES_WITH_METADATA = {
+    Decimal: _get_decimal_type,
+}
 
 
 def _is_optional(field_type: type[Any]) -> bool:
@@ -44,7 +63,9 @@ def _is_optional(field_type: type[Any]) -> bool:
     return type(None) in get_args(field_type)
 
 
-def _get_pyarrow_type(field_type: type[Any], allow_losing_tz: bool) -> pa.DataType:
+def _get_pyarrow_type(
+    field_type: type[Any], metadata: List[Any], allow_losing_tz: bool
+) -> pa.DataType:
     if field_type in FIELD_MAP:
         return FIELD_MAP[field_type]
 
@@ -56,15 +77,20 @@ def _get_pyarrow_type(field_type: type[Any], allow_losing_tz: bool) -> pa.DataTy
             f"{field_type} only allowed if ok losing timezone information"
         )
 
+    if field_type in TYPES_WITH_METADATA:
+        return TYPES_WITH_METADATA[field_type](metadata)
+
     raise SchemaCreationError(f"Unknown type: {field_type}")
 
 
-def get_pyarrow_schema(
-    pydantic_class: Type[BaseModelType], allow_losing_tz: bool = False
+def _get_pyarrow_schema(
+    pydantic_class: Type[BaseModelType],
+    allow_losing_tz: bool,
 ) -> pa.Schema:
     fields = []
     for name, field_info in pydantic_class.model_fields.items():
         field_type = field_info.annotation
+        metadata = field_info.metadata
 
         if field_type is None:
             # Not sure how to get here through pydantic, hence nocover
@@ -80,7 +106,18 @@ def get_pyarrow_schema(
                 # mypy infers field_type as type[Any] | None here, hence casting
                 field_type = cast(type[Any], types_under_union[0])
 
-            pa_field = _get_pyarrow_type(field_type, allow_losing_tz=allow_losing_tz)
+                if get_origin(field_type) is Annotated:
+                    metadata = [
+                        item
+                        for arg in get_args(field_type)
+                        if hasattr(arg, "metadata")
+                        for item in arg.metadata
+                    ]
+                    field_type = cast(type[Any], get_args(field_type)[0])
+
+            pa_field = _get_pyarrow_type(
+                field_type, metadata, allow_losing_tz=allow_losing_tz
+            )
         except Exception as err:  # noqa: BLE001 - ignore blind exception
             raise SchemaCreationError(
                 f"Error processing field {name}: {field_type}, {err}"
@@ -89,3 +126,9 @@ def get_pyarrow_schema(
         fields.append(pa.field(name, pa_field, nullable=nullable))
 
     return pa.schema(fields)
+
+
+def get_pyarrow_schema(
+    pydantic_class: Type[BaseModelType], allow_losing_tz: bool = False
+) -> pa.Schema:
+    return _get_pyarrow_schema(pydantic_class, allow_losing_tz)

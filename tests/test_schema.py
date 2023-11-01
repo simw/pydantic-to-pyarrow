@@ -1,12 +1,24 @@
 import datetime
 import tempfile
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Deque, Dict, List, Optional, Tuple
 
 import pyarrow as pa  # type: ignore
 import pyarrow.parquet as pq  # type: ignore
 import pytest
-from pydantic import AwareDatetime, BaseModel, NaiveDatetime
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    Field,
+    NaiveDatetime,
+    StrictBool,
+    StrictFloat,
+    StrictInt,
+    StrictStr,
+    condecimal,
+)
+from typing_extensions import Annotated
 
 from pydantic_to_pyarrow import SchemaCreationError, get_pyarrow_schema
 
@@ -38,6 +50,31 @@ def test_simple_types() -> None:
         b: bool
         c: int
         d: float
+
+    expected = pa.schema(
+        [
+            pa.field("a", pa.string(), nullable=False),
+            pa.field("b", pa.bool_(), nullable=False),
+            pa.field("c", pa.int64(), nullable=False),
+            pa.field("d", pa.float64(), nullable=False),
+        ]
+    )
+
+    actual = get_pyarrow_schema(SimpleModel)
+    assert actual == expected
+
+    objs = [{"a": "a", "b": True, "c": 1, "d": 1.01}]
+    new_schema, new_objs = _write_pq_and_read(objs, expected)
+    assert new_schema == expected
+    assert new_objs == objs
+
+
+def test_strict_simple_types() -> None:
+    class SimpleModel(BaseModel):
+        a: StrictStr
+        b: StrictBool
+        c: StrictInt
+        d: StrictFloat
 
     expected = pa.schema(
         [
@@ -194,3 +231,41 @@ def test_awaredatetime_without_flag() -> None:
 
     with pytest.raises(SchemaCreationError):
         get_pyarrow_schema(DateModel)
+
+
+def test_decimal() -> None:
+    class DecimalModel(BaseModel):
+        a: Annotated[Decimal, Field(max_digits=5, decimal_places=2)]
+        b: Optional[Annotated[Decimal, Field(max_digits=5, decimal_places=2)]] = None
+        # condecimal is discouraged in pydantic 2.x, as it returns a type
+        # which doesn't play well with static analysis tools, hence type: ignore
+        c: condecimal(max_digits=16, decimal_places=3)  # type: ignore
+
+    expected = pa.schema(
+        [
+            pa.field("a", pa.decimal128(5, 2), nullable=False),
+            pa.field("b", pa.decimal128(5, 2), nullable=True),
+            pa.field("c", pa.decimal128(16, 3), nullable=False),
+        ]
+    )
+    actual = get_pyarrow_schema(DecimalModel)
+    assert actual == expected
+
+    objs = [
+        {
+            "a": Decimal("1.23"),
+            "b": Decimal("4.56"),
+            "c": Decimal("123.456"),
+        }
+    ]
+    new_schema, new_objs = _write_pq_and_read(objs, expected)
+    assert new_schema == expected
+    assert new_objs == objs
+
+
+def test_bare_decimal_should_fail() -> None:
+    class DecimalModel(BaseModel):
+        a: Decimal
+
+    with pytest.raises(SchemaCreationError):
+        get_pyarrow_schema(DecimalModel)
