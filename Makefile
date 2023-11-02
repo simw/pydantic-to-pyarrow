@@ -28,6 +28,12 @@ test: prepare
 	poetry run coverage report
 
 
+.PHONY: test-dep-versions
+test-dep-versions: prepare
+	poetry run pip install pyarrow==14.0.0
+	poetry run python -m pytest
+
+
 .PHONY: clean
 clean:
 	rm -rf `find . -name __pycache__`
