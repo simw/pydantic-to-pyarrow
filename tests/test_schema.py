@@ -341,3 +341,60 @@ def test_float_literal() -> None:
     with pytest.raises(SchemaCreationError) as err:
         get_pyarrow_schema(LiteralModel)
     assert "Literal type is only supported with all" in str(err)
+
+
+def test_list_of_strings() -> None:
+    class ListModel(BaseModel):
+        a: List[str]
+
+    expected = pa.schema(
+        [
+            pa.field("a", pa.list_(pa.string()), nullable=False),
+        ]
+    )
+    actual = get_pyarrow_schema(ListModel)
+    assert actual == expected
+
+    objs = [{"a": ["a", "b"]}]
+    new_schema, new_objs = _write_pq_and_read(objs, expected)
+    assert new_schema == expected
+    assert new_objs == objs
+
+
+def test_list_of_decimals() -> None:
+    class ListModel(BaseModel):
+        a: List[Annotated[Decimal, Field(max_digits=5, decimal_places=2)]]
+
+    expected = pa.schema(
+        [
+            pa.field("a", pa.list_(pa.decimal128(5, 2)), nullable=False),
+        ]
+    )
+
+    actual = get_pyarrow_schema(ListModel)
+    assert actual == expected
+
+    objs = [{"a": [Decimal("1.23"), Decimal("4.56")]}]
+    new_schema, new_objs = _write_pq_and_read(objs, expected)
+    assert new_schema == expected
+    assert new_objs == objs
+
+
+def test_list_of_optional_elements() -> None:
+    class ListModel(BaseModel):
+        a: List[Optional[str]]
+        b: List[Optional[Annotated[Decimal, Field(max_digits=5, decimal_places=2)]]]
+
+    expected = pa.schema(
+        [
+            pa.field("a", pa.list_(pa.string()), nullable=False),
+            pa.field("b", pa.list_(pa.decimal128(5, 2)), nullable=False),
+        ]
+    )
+    actual = get_pyarrow_schema(ListModel)
+    assert actual == expected
+
+    objs = [{"a": ["a", None], "b": [Decimal("1.23"), None]}]
+    new_schema, new_objs = _write_pq_and_read(objs, expected)
+    assert new_schema == expected
+    assert new_objs == objs

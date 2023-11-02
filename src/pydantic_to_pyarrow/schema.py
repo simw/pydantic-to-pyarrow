@@ -52,6 +52,37 @@ TYPES_WITH_METADATA = {
 }
 
 
+def _get_literal_type(
+    field_type: type[Any], _metadata: List[Any], _allow_losing_tz: bool
+) -> pa.DataType:
+    values = get_args(field_type)
+    if all(isinstance(value, str) for value in values):
+        return pa.dictionary(pa.int32(), pa.string())
+    elif all(isinstance(value, int) for value in values):
+        # Dictionary of (int, int) is converted to just int when
+        # written into parquet.
+        return pa.int64()
+    else:
+        msg = "Literal type is only supported with all int or string values. "
+        raise SchemaCreationError(msg)
+
+
+def _get_list_type(
+    field_type: type[Any], metadata: List[Any], allow_losing_tz: bool
+) -> pa.DataType:
+    sub_type = get_args(field_type)[0]
+    if _is_optional(sub_type):
+        # pyarrow lists can have null elements in them
+        sub_type = list(set(get_args(sub_type)) - {type(None)})[0]
+    return pa.list_(_get_pyarrow_type(sub_type, metadata, allow_losing_tz))
+
+
+FIELD_TYPES = {
+    Literal: _get_literal_type,
+    list: _get_list_type,
+}
+
+
 def _is_optional(field_type: type[Any]) -> bool:
     origin = get_origin(field_type)
     is_python_39_union = origin is Union
@@ -66,6 +97,19 @@ def _is_optional(field_type: type[Any]) -> bool:
 def _get_pyarrow_type(
     field_type: type[Any], metadata: List[Any], allow_losing_tz: bool
 ) -> pa.DataType:
+    if get_origin(field_type) is Annotated:
+        # For a 'bare' annotation, the metadata will be
+        # supplied directly in field.metadata. However,
+        # for lists of annotated types or optional annotated
+        # types, we need an extra step to get the metadata.
+        metadata = [
+            item
+            for arg in get_args(field_type)
+            if hasattr(arg, "metadata")
+            for item in arg.metadata
+        ]
+        field_type = cast(type[Any], get_args(field_type)[0])
+
     if field_type in FIELD_MAP:
         return FIELD_MAP[field_type]
 
@@ -80,17 +124,10 @@ def _get_pyarrow_type(
     if field_type in TYPES_WITH_METADATA:
         return TYPES_WITH_METADATA[field_type](metadata)
 
-    if get_origin(field_type) is Literal:
-        values = get_args(field_type)
-        if all(isinstance(value, str) for value in values):
-            return pa.dictionary(pa.int32(), pa.string())
-        elif all(isinstance(value, int) for value in values):
-            # Dictionary of (int, int) is converted to just int when
-            # written into parquet.
-            return pa.int64()
-        else:
-            msg = "Literal type is only supported with all int or string values. "
-            raise SchemaCreationError(msg)
+    if get_origin(field_type) in FIELD_TYPES:
+        return FIELD_TYPES[get_origin(field_type)](
+            field_type, metadata, allow_losing_tz
+        )
 
     # isinstance(filed_type, type) checks whether it's a class
     # otherwise eg Deque[int] would casue an exception on issubclass
@@ -123,15 +160,6 @@ def _get_pyarrow_schema(
                 types_under_union = list(set(get_args(field_type)) - {type(None)})
                 # mypy infers field_type as type[Any] | None here, hence casting
                 field_type = cast(type[Any], types_under_union[0])
-
-                if get_origin(field_type) is Annotated:
-                    metadata = [
-                        item
-                        for arg in get_args(field_type)
-                        if hasattr(arg, "metadata")
-                        for item in arg.metadata
-                    ]
-                    field_type = cast(type[Any], get_args(field_type)[0])
 
             pa_field = _get_pyarrow_type(
                 field_type, metadata, allow_losing_tz=allow_losing_tz
