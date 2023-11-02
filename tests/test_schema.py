@@ -2,7 +2,7 @@ import datetime
 import tempfile
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Deque, Dict, List, Optional, Tuple
+from typing import Any, Deque, Dict, List, Literal, Optional, Tuple
 
 import pyarrow as pa  # type: ignore
 import pyarrow.parquet as pq  # type: ignore
@@ -98,8 +98,9 @@ def test_unknown_type() -> None:
     class SimpleModel(BaseModel):
         a: Deque[int]
 
-    with pytest.raises(SchemaCreationError):
+    with pytest.raises(SchemaCreationError) as err:
         get_pyarrow_schema(SimpleModel)
+    assert "Unknown type" in str(err)
 
 
 def test_nullable_types() -> None:
@@ -216,8 +217,10 @@ def test_datetime_without_flag() -> None:
     class DateModel(BaseModel):
         a: datetime.datetime
 
-    with pytest.raises(SchemaCreationError):
+    with pytest.raises(SchemaCreationError) as err:
         get_pyarrow_schema(DateModel)
+    expected_msg = "only allowed if ok losing timezone information"
+    assert expected_msg in str(err)
 
 
 def test_awaredatetime_without_flag() -> None:
@@ -229,8 +232,10 @@ def test_awaredatetime_without_flag() -> None:
     class DateModel(BaseModel):
         a: AwareDatetime
 
-    with pytest.raises(SchemaCreationError):
+    with pytest.raises(SchemaCreationError) as err:
         get_pyarrow_schema(DateModel)
+    expected_msg = "only allowed if ok losing timezone information"
+    assert expected_msg in str(err)
 
 
 def test_decimal() -> None:
@@ -267,5 +272,72 @@ def test_bare_decimal_should_fail() -> None:
     class DecimalModel(BaseModel):
         a: Decimal
 
-    with pytest.raises(SchemaCreationError):
+    with pytest.raises(SchemaCreationError) as err:
         get_pyarrow_schema(DecimalModel)
+    expected_msg = "Decimal type needs annotation setting max_digits and decimal_places"
+    assert expected_msg in str(err)
+
+
+def test_nested_model() -> None:
+    class NestedModel(BaseModel):
+        a: str
+        b: int
+
+    class OuterModel(BaseModel):
+        c: NestedModel
+        d: Optional[NestedModel]
+
+    nested_fields = pa.struct(
+        [
+            pa.field("a", pa.string(), nullable=False),
+            pa.field("b", pa.int64(), nullable=False),
+        ]
+    )
+    expected = pa.schema(
+        [
+            pa.field("c", nested_fields, nullable=False),
+            pa.field("d", nested_fields, nullable=True),
+        ]
+    )
+
+    actual = get_pyarrow_schema(OuterModel)
+    assert actual == expected
+
+    objs = [
+        {
+            "c": {"a": "a", "b": 1},
+            "d": {"a": "b", "b": 2},
+        }
+    ]
+    new_schema, new_objs = _write_pq_and_read(objs, expected)
+    assert new_schema == expected
+    assert new_objs == objs
+
+
+def test_literal() -> None:
+    class LiteralModel(BaseModel):
+        a: Literal["a", "b"]
+        b: Literal[1, 2]
+
+    expected = pa.schema(
+        [
+            pa.field("a", pa.dictionary(pa.int32(), pa.string()), nullable=False),
+            pa.field("b", pa.int64(), nullable=False),
+        ]
+    )
+    actual = get_pyarrow_schema(LiteralModel)
+    assert actual == expected
+
+    objs = [{"a": "a", "b": 1}]
+    new_schema, new_objs = _write_pq_and_read(objs, expected)
+    assert new_schema == expected
+    assert new_objs == objs
+
+
+def test_float_literal() -> None:
+    class LiteralModel(BaseModel):
+        a: Literal[b"a", b"b"]
+
+    with pytest.raises(SchemaCreationError) as err:
+        get_pyarrow_schema(LiteralModel)
+    assert "Literal type is only supported with all" in str(err)
