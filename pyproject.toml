@@ -36,6 +36,8 @@ packages = [{include = "pydantic_to_pyarrow", from = "src"}]
 python = "^3.8"
 pydantic = "^2.4.2"
 pyarrow = "^13.0.0"
+# numpy < 1.26.0 doesn't work with python 3.12
+numpy = { version = "^1.26.0", python = "=3.12" }
 typing-extensions = "^4.8.0"
 
 
