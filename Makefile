@@ -33,6 +33,9 @@ test-dep-versions: prepare
 	poetry run pip install pyarrow==14.0.0
 	poetry run python -m pytest
 
+	poetry run pip install pydantic==2.0
+	poetry run python -m pytest
+
 
 .PHONY: clean
 clean:
