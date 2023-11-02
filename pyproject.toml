@@ -5,10 +5,31 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "pydantic_to_pyarrow"
-version = "0.0.1"
-description = ""
-authors = ["simw"]
+version = "0.1"
+description = "Conversion from pydantic models to pyarrow schemas"
+authors = ["Simon Wicks <simw@users.noreply.github.com>"]
 readme = "README.md"
+repository = "https://github.com/simw/pydantic-to-pyarrow"
+license = "MIT"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "Operating System :: OS Independent",
+    "Environment :: Console",
+    "Environment :: MacOS X",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
 packages = [{include = "pydantic_to_pyarrow", from = "src"}]
 
 [tool.poetry.dependencies]

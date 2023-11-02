@@ -1,0 +1,54 @@
+on:
+  release:
+    types: [created]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+    - run: curl -sSL https://install.python-poetry.org | python - -y
+    - run: make lint
+    
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    - run: curl -sSL https://install.python-poetry.org | python - -y
+    - run: poetry config virtualenvs.in-project true
+    - run: make test
+
+  deploy:
+    needs:
+      - test
+      - lint
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+    - run: curl -sSL https://install.python-poetry.org | python - -y
+
+    - name: check GITHUB_REF matches package version
+      uses: samuelcolvin/check-python-version@v3
+      with:
+        version_file_path: src/pydantic_to_pyarrow/__init__.py
+
+    - run: make package
+    - name: upload to pypi
+      run: poetry publish
+      env:
+        POETRY_PYPI_TOKEN_PYPI: ${{ secrets.pypi_token }}

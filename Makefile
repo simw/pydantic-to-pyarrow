@@ -15,6 +15,7 @@ lintable: prepare
 
 .PHONY: lint
 lint: prepare
+	poetry check
 	poetry run black --check --diff $(sources)
 	poetry run ruff check $(sources)
 	poetry run mypy $(sources)
