@@ -31,6 +31,35 @@ pyarrow schema. This library aims to achieve that.
 
 This library is not yet availabe on PyPI.
 
+## Conversion Table
+
+The below conversions still run into the possibility of
+overflows in the Pyarrow types. For example, in Python 3
+the `int` type is unbounded, whereas the pa.int64() type has a fixed
+maximum. In most cases, this should not be an issue, but if you are
+concerned about overflows, you should not use this library and
+should manually specify the full schema.
+
+Python / Pydantic | Pyarrow | Overflow
+--- | --- | ---
+str | pa.string() |
+Literal[strings] | pa.dictionary(pa.int32(), pa.string())
+. | . | .
+int | pa.int64() | Yes, at 2^63
+Literal[ints] | pa.int64() | Yes, at 2^63
+float | pa.float64() | Yes
+decimal.Decimal | pa.decimal128 ONLY if supplying max_digits and decimal_places for pydantic field | Yes
+. | . | .
+datetime.date | pa.date32() |
+datetime.time | pa.time64("us") |
+datetime.datetime | pa.timestamp("ms", tz=None) ONLY if param allow_losing_tz=True |
+pydantic.types.NaiveDatetime | pa.timestamp("ms", tz=None) |
+pydantic.types.AwareDatetime | pa.timestamp("ms", tz=None) ONLY if param allow_losing_tz=True |
+. | .
+Optional[...] | The pyarrow field is nullable |
+Pydantic Model | pa.struct() |
+
+
 ## An Example
 
 ```py
