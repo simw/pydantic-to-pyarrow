@@ -1,6 +1,9 @@
 # pydantic-to-pyarrow
 
 [![CI](https://github.com/simw/pydantic-to-pyarrow/actions/workflows/test.yml/badge.svg?event=push)](https://github.com/simw/pydantic-to-pyarrow/actions/workflows/test.yml)
+[![pypi](https://img.shields.io/pypi/v/pydantic-to-pyarrow.svg)](https://pypi.python.org/pypi/pydantic-to-pyarrow)
+[![versions](https://img.shields.io/pypi/pyversions/pydantic-to-pyarrow.svg)](https://github.com/simw/pydantic-to-pyarrow)
+[![license](https://img.shields.io/github/license/simw/pydantic-to-pyarrow.svg)](https://github.com/simw/pydantic-to-pyarrow/blob/main/LICENSE)
 
 pydantic-to-pyarrow is a library for Python to help with conversion
 of pydantic models to pyarrow schemas.
@@ -29,7 +32,9 @@ pyarrow schema. This library aims to achieve that.
 
 ## Installation
 
-This library is not yet availabe on PyPI.
+```bash
+pip install pydantic-to-pyarrow
+```
 
 ## Conversion Table
 
