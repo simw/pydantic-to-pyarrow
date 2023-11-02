@@ -58,21 +58,25 @@ pydantic.types.AwareDatetime | pa.timestamp("ms", tz=None) ONLY if param allow_l
 . | .
 Optional[...] | The pyarrow field is nullable |
 Pydantic Model | pa.struct() |
-
+List[...] | pa.list_(...) |
 
 ## An Example
 
 ```py
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel
 from pydantic_to_pyarrow import get_pyarrow_schema
+
+class NestedModel(BaseModel):
+    str_field: str
 
 
 class MyModel(BaseModel):
     int_field: int
     opt_str_field: Optional[str]
     py310_opt_str_field: str | None
+    nested: List[NestedModel]
 
 
 pa_schema = get_pyarrow_schema(MyModel)
@@ -80,6 +84,9 @@ print(pa_schema)
 #> int_field: int64 not null
 #> opt_str_field: string
 #> py310_opt_str_field: string
+#> nested: list<item: struct<str_field: string not null>> not null
+#>   child 0, item: struct<str_field: string not null>
+#>       child 0, str_field: string not null
 ```
 
 ## Development
