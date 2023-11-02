@@ -7,11 +7,12 @@ from typing import Any, Deque, Dict, List, Literal, Optional, Tuple
 import pyarrow as pa  # type: ignore
 import pyarrow.parquet as pq  # type: ignore
 import pytest
-from pydantic import (
+from annotated_types import Gt
+from pydantic import BaseModel, Field
+from pydantic.types import (
     AwareDatetime,
-    BaseModel,
-    Field,
     NaiveDatetime,
+    PositiveInt,
     StrictBool,
     StrictFloat,
     StrictInt,
@@ -101,6 +102,51 @@ def test_unknown_type() -> None:
     with pytest.raises(SchemaCreationError) as err:
         get_pyarrow_schema(SimpleModel)
     assert "Unknown type" in str(err)
+
+
+def test_positive_ints() -> None:
+    class IntModel(BaseModel):
+        a: int
+        b: PositiveInt
+        c: Annotated[int, Field(ge=0)]
+        d: Annotated[int, Field(ge=-1)]
+        e: Optional[PositiveInt]
+        f: List[PositiveInt]
+
+    expected = pa.schema(
+        [
+            pa.field("a", pa.int64(), nullable=False),
+            pa.field("b", pa.uint64(), nullable=False),
+            pa.field("c", pa.uint64(), nullable=False),
+            pa.field("d", pa.int64(), nullable=False),
+            pa.field("e", pa.uint64(), nullable=True),
+            pa.field("f", pa.list_(pa.uint64()), nullable=False),
+        ]
+    )
+
+    actual = get_pyarrow_schema(IntModel)
+    assert actual == expected
+
+    objs = [{"a": 1, "b": 1, "c": 1, "d": 1, "e": 1, "f": [1, 2, 3]}]
+    new_schema, new_objs = _write_pq_and_read(objs, expected)
+    assert new_schema == expected
+    assert new_objs == objs
+
+
+def test_ints_with_wrong_annotations() -> None:
+    class IntModel(BaseModel):
+        a: Annotated[int, Gt("5")]
+
+    with pytest.raises(SchemaCreationError) as err:
+        get_pyarrow_schema(IntModel)
+    assert "Gt metadata must be int" in str(err)
+
+    class IntModel2(BaseModel):
+        a: Annotated[int, Field(ge="5")]
+
+    with pytest.raises(SchemaCreationError) as err:
+        get_pyarrow_schema(IntModel2)
+    assert "Ge metadata must be int" in str(err)
 
 
 def test_nullable_types() -> None:

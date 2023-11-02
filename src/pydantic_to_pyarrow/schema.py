@@ -1,9 +1,10 @@
 import datetime
 import types
 from decimal import Decimal
-from typing import Any, List, Literal, Type, TypeVar, Union, cast
+from typing import Any, List, Literal, Optional, Type, TypeVar, Union, cast
 
 import pyarrow as pa  # type: ignore
+from annotated_types import Ge, Gt
 from pydantic import AwareDatetime, BaseModel, NaiveDatetime
 from typing_extensions import Annotated, get_args, get_origin
 
@@ -17,7 +18,6 @@ class SchemaCreationError(Exception):
 FIELD_MAP = {
     str: pa.string(),
     bool: pa.bool_(),
-    int: pa.int64(),
     float: pa.float64(),
     datetime.date: pa.date32(),
     NaiveDatetime: pa.timestamp("ms", tz=None),
@@ -32,6 +32,23 @@ LOSING_TZ_TYPES = {
     datetime.datetime: pa.timestamp("ms", tz=None),
     AwareDatetime: pa.timestamp("ms", tz=None),
 }
+
+
+def _get_int_type(metadata: List[Any]) -> pa.DataType:
+    min_value: Optional[int] = None
+    for el in metadata:
+        if isinstance(el, Gt):
+            if el.gt is not None and not isinstance(el.gt, int):
+                raise SchemaCreationError("Gt metadata must be int")
+            min_value = el.gt
+        elif isinstance(el, Ge):
+            if el.ge is not None and not isinstance(el.ge, int):
+                raise SchemaCreationError("Ge metadata must be int")
+            min_value = el.ge
+
+    if min_value is not None and min_value >= 0:
+        return pa.uint64()
+    return pa.int64()
 
 
 def _get_decimal_type(metadata: List[Any]) -> pa.DataType:
@@ -49,6 +66,7 @@ def _get_decimal_type(metadata: List[Any]) -> pa.DataType:
 
 TYPES_WITH_METADATA = {
     Decimal: _get_decimal_type,
+    int: _get_int_type,
 }
 
 
@@ -77,9 +95,23 @@ def _get_list_type(
     return pa.list_(_get_pyarrow_type(sub_type, metadata, allow_losing_tz))
 
 
+def _get_annotated_type(
+    field_type: type[Any], metadata: List[Any], allow_losing_tz: bool
+) -> pa.DataType:
+    # TODO: fix / clean up / understand why / if this works in all cases
+    args = get_args(field_type)[1:]
+    metadatas = [
+        item.metadata if hasattr(item, "metadata") else [item] for item in args
+    ]
+    metadata = [item for sublist in metadatas for item in sublist]
+    field_type = cast(type[Any], get_args(field_type)[0])
+    return _get_pyarrow_type(field_type, metadata, allow_losing_tz)
+
+
 FIELD_TYPES = {
     Literal: _get_literal_type,
     list: _get_list_type,
+    Annotated: _get_annotated_type,
 }
 
 
@@ -97,19 +129,6 @@ def _is_optional(field_type: type[Any]) -> bool:
 def _get_pyarrow_type(
     field_type: type[Any], metadata: List[Any], allow_losing_tz: bool
 ) -> pa.DataType:
-    if get_origin(field_type) is Annotated:
-        # For a 'bare' annotation, the metadata will be
-        # supplied directly in field.metadata. However,
-        # for lists of annotated types or optional annotated
-        # types, we need an extra step to get the metadata.
-        metadata = [
-            item
-            for arg in get_args(field_type)
-            if hasattr(arg, "metadata")
-            for item in arg.metadata
-        ]
-        field_type = cast(type[Any], get_args(field_type)[0])
-
     if field_type in FIELD_MAP:
         return FIELD_MAP[field_type]
 
