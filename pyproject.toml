@@ -35,9 +35,16 @@ packages = [{include = "pydantic_to_pyarrow", from = "src"}]
 [tool.poetry.dependencies]
 python = "^3.8"
 pydantic = "^2.4.2"
-pyarrow = "^13.0.0"
-# numpy < 1.26.0 doesn't work with python 3.12
-numpy = { version = "^1.26.0", python = "=3.12" }
+pyarrow = [
+    { version = ">=13.0.0,<15.0.0", python = "<3.12" },
+    { version = ">=14.0.0,<15.0.0", python = ">=3.12,<3.13" },
+]
+# We don't have a direct numpy dependency, but pyarrow depends on numpy
+# and numpy has python version constraints
+numpy = [
+    { version = "<1.25.0", python = "<3.9" },
+    { version = "^1.26.0", python = ">=3.12,<3.13" }
+]
 typing-extensions = "^4.8.0"
 
 
