@@ -71,7 +71,7 @@ TYPES_WITH_METADATA = {
 
 
 def _get_literal_type(
-    field_type: type[Any], _metadata: List[Any], _allow_losing_tz: bool
+    field_type: Type[Any], _metadata: List[Any], _allow_losing_tz: bool
 ) -> pa.DataType:
     values = get_args(field_type)
     if all(isinstance(value, str) for value in values):
@@ -86,7 +86,7 @@ def _get_literal_type(
 
 
 def _get_list_type(
-    field_type: type[Any], metadata: List[Any], allow_losing_tz: bool
+    field_type: Type[Any], metadata: List[Any], allow_losing_tz: bool
 ) -> pa.DataType:
     sub_type = get_args(field_type)[0]
     if _is_optional(sub_type):
@@ -96,7 +96,7 @@ def _get_list_type(
 
 
 def _get_annotated_type(
-    field_type: type[Any], metadata: List[Any], allow_losing_tz: bool
+    field_type: Type[Any], metadata: List[Any], allow_losing_tz: bool
 ) -> pa.DataType:
     # TODO: fix / clean up / understand why / if this works in all cases
     args = get_args(field_type)[1:]
@@ -104,7 +104,7 @@ def _get_annotated_type(
         item.metadata if hasattr(item, "metadata") else [item] for item in args
     ]
     metadata = [item for sublist in metadatas for item in sublist]
-    field_type = cast(type[Any], get_args(field_type)[0])
+    field_type = cast(Type[Any], get_args(field_type)[0])
     return _get_pyarrow_type(field_type, metadata, allow_losing_tz)
 
 
@@ -115,7 +115,7 @@ FIELD_TYPES = {
 }
 
 
-def _is_optional(field_type: type[Any]) -> bool:
+def _is_optional(field_type: Type[Any]) -> bool:
     origin = get_origin(field_type)
     is_python_39_union = origin is Union
     is_python_310_union = hasattr(types, "UnionType") and origin is types.UnionType
@@ -127,7 +127,7 @@ def _is_optional(field_type: type[Any]) -> bool:
 
 
 def _get_pyarrow_type(
-    field_type: type[Any], metadata: List[Any], allow_losing_tz: bool
+    field_type: Type[Any], metadata: List[Any], allow_losing_tz: bool
 ) -> pa.DataType:
     if field_type in FIELD_MAP:
         return FIELD_MAP[field_type]
@@ -177,8 +177,8 @@ def _get_pyarrow_schema(
             if _is_optional(field_type):
                 nullable = True
                 types_under_union = list(set(get_args(field_type)) - {type(None)})
-                # mypy infers field_type as type[Any] | None here, hence casting
-                field_type = cast(type[Any], types_under_union[0])
+                # mypy infers field_type as Type[Any] | None here, hence casting
+                field_type = cast(Type[Any], types_under_union[0])
 
             pa_field = _get_pyarrow_type(
                 field_type, metadata, allow_losing_tz=allow_losing_tz
