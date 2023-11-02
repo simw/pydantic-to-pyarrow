@@ -1,7 +1,7 @@
 import datetime
 import types
 from decimal import Decimal
-from typing import Any, List, Type, TypeVar, Union, cast
+from typing import Any, List, Literal, Type, TypeVar, Union, cast
 
 import pyarrow as pa  # type: ignore
 from pydantic import AwareDatetime, BaseModel, NaiveDatetime
@@ -80,12 +80,30 @@ def _get_pyarrow_type(
     if field_type in TYPES_WITH_METADATA:
         return TYPES_WITH_METADATA[field_type](metadata)
 
+    if get_origin(field_type) is Literal:
+        values = get_args(field_type)
+        if all(isinstance(value, str) for value in values):
+            return pa.dictionary(pa.int32(), pa.string())
+        elif all(isinstance(value, int) for value in values):
+            # Dictionary of (int, int) is converted to just int when
+            # written into parquet.
+            return pa.int64()
+        else:
+            msg = "Literal type is only supported with all int or string values. "
+            raise SchemaCreationError(msg)
+
+    # isinstance(filed_type, type) checks whether it's a class
+    # otherwise eg Deque[int] would casue an exception on issubclass
+    if isinstance(field_type, type) and issubclass(field_type, BaseModel):
+        return _get_pyarrow_schema(field_type, allow_losing_tz, as_schema=False)
+
     raise SchemaCreationError(f"Unknown type: {field_type}")
 
 
 def _get_pyarrow_schema(
     pydantic_class: Type[BaseModelType],
     allow_losing_tz: bool,
+    as_schema: bool = True,
 ) -> pa.Schema:
     fields = []
     for name, field_info in pydantic_class.model_fields.items():
@@ -125,7 +143,9 @@ def _get_pyarrow_schema(
 
         fields.append(pa.field(name, pa_field, nullable=nullable))
 
-    return pa.schema(fields)
+    if as_schema:
+        return pa.schema(fields)
+    return pa.struct(fields)
 
 
 def get_pyarrow_schema(
