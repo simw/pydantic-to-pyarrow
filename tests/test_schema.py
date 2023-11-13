@@ -14,6 +14,7 @@ from pydantic.types import (
     NaiveDatetime,
     PositiveInt,
     StrictBool,
+    StrictBytes,
     StrictFloat,
     StrictInt,
     StrictStr,
@@ -51,6 +52,7 @@ def test_simple_types() -> None:
         b: bool
         c: int
         d: float
+        e: bytes
 
     expected = pa.schema(
         [
@@ -58,13 +60,14 @@ def test_simple_types() -> None:
             pa.field("b", pa.bool_(), nullable=False),
             pa.field("c", pa.int64(), nullable=False),
             pa.field("d", pa.float64(), nullable=False),
+            pa.field("e", pa.binary(), nullable=False),
         ]
     )
 
     actual = get_pyarrow_schema(SimpleModel)
     assert actual == expected
 
-    objs = [{"a": "a", "b": True, "c": 1, "d": 1.01}]
+    objs = [{"a": "a", "b": True, "c": 1, "d": 1.01, "e": b"e"}]
     new_schema, new_objs = _write_pq_and_read(objs, expected)
     assert new_schema == expected
     assert new_objs == objs
@@ -76,6 +79,7 @@ def test_strict_simple_types() -> None:
         b: StrictBool
         c: StrictInt
         d: StrictFloat
+        e: StrictBytes
 
     expected = pa.schema(
         [
@@ -83,13 +87,14 @@ def test_strict_simple_types() -> None:
             pa.field("b", pa.bool_(), nullable=False),
             pa.field("c", pa.int64(), nullable=False),
             pa.field("d", pa.float64(), nullable=False),
+            pa.field("e", pa.binary(), nullable=False),
         ]
     )
 
     actual = get_pyarrow_schema(SimpleModel)
     assert actual == expected
 
-    objs = [{"a": "a", "b": True, "c": 1, "d": 1.01}]
+    objs = [{"a": "a", "b": True, "c": 1, "d": 1.01, "e": b"e"}]
     new_schema, new_objs = _write_pq_and_read(objs, expected)
     assert new_schema == expected
     assert new_objs == objs
