@@ -17,6 +17,7 @@ class SchemaCreationError(Exception):
 
 FIELD_MAP = {
     str: pa.string(),
+    bytes: pa.binary(),
     bool: pa.bool_(),
     float: pa.float64(),
     datetime.date: pa.date32(),
