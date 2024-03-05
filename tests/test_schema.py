@@ -1,6 +1,7 @@
 import datetime
 import tempfile
 from decimal import Decimal
+from enum import Enum, auto
 from pathlib import Path
 from typing import Any, Deque, Dict, List, Literal, Optional, Tuple
 
@@ -449,3 +450,83 @@ def test_list_of_optional_elements() -> None:
     new_schema, new_objs = _write_pq_and_read(objs, expected)
     assert new_schema == expected
     assert new_objs == objs
+
+
+def test_enum_str() -> None:
+    class MyEnum(Enum):
+        val1 = "val1"
+        val2 = "val2"
+        val3 = "val3"
+
+    class EnumModel(BaseModel):
+        a: MyEnum
+        b: List[MyEnum]
+        c: Optional[MyEnum]
+
+    expected = pa.schema(
+        [
+            pa.field("a", pa.dictionary(pa.int32(), pa.string()), nullable=False),
+            pa.field(
+                "b", pa.list_(pa.dictionary(pa.int32(), pa.string())), nullable=False
+            ),
+            pa.field("c", pa.dictionary(pa.int32(), pa.string()), nullable=True),
+        ]
+    )
+
+    actual = get_pyarrow_schema(EnumModel)
+    assert actual == expected
+
+    objs = [{"a": "val1", "b": ["val2", "val3"], "c": None}]
+    model = EnumModel.model_validate(objs[0])
+    assert model.a == MyEnum.val1
+    assert model.b == [MyEnum.val2, MyEnum.val3]
+    assert model.c is None
+
+    new_schema, new_objs = _write_pq_and_read(objs, expected)
+    assert new_schema == expected
+    assert new_objs == objs
+
+
+def test_enum_int() -> None:
+    class MyEnum(Enum):
+        val1 = 1
+        val2 = 2
+        val3 = auto()
+
+    class EnumModel(BaseModel):
+        a: MyEnum
+        b: List[MyEnum]
+        c: Optional[MyEnum]
+
+    expected = pa.schema(
+        [
+            pa.field("a", pa.int64(), nullable=False),
+            pa.field("b", pa.list_(pa.int64()), nullable=False),
+            pa.field("c", pa.int64(), nullable=True),
+        ]
+    )
+
+    actual = get_pyarrow_schema(EnumModel)
+    assert actual == expected
+
+    objs = [{"a": 1, "b": [2, 3], "c": None}]
+    model = EnumModel.model_validate(objs[0])
+    assert model.a == MyEnum.val1
+    assert model.b == [MyEnum.val2, MyEnum.val3]
+    assert model.c is None
+
+    new_schema, new_objs = _write_pq_and_read(objs, expected)
+    assert new_schema == expected
+    assert new_objs == objs
+
+
+def test_enum_mixed() -> None:
+    class MyEnum(Enum):
+        val1 = 1
+        val2 = "val2"
+
+    class EnumModel(BaseModel):
+        a: MyEnum
+
+    with pytest.raises(SchemaCreationError):
+        get_pyarrow_schema(EnumModel)

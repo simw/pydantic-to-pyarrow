@@ -1,6 +1,7 @@
 import datetime
 import types
 from decimal import Decimal
+from enum import EnumMeta
 from typing import Any, List, Literal, Optional, Type, TypeVar, Union, cast
 
 import pyarrow as pa  # type: ignore
@@ -9,6 +10,7 @@ from pydantic import AwareDatetime, BaseModel, NaiveDatetime
 from typing_extensions import Annotated, get_args, get_origin
 
 BaseModelType = TypeVar("BaseModelType", bound=BaseModel)
+EnumType = TypeVar("EnumType", bound=EnumMeta)
 
 
 class SchemaCreationError(Exception):
@@ -116,6 +118,19 @@ FIELD_TYPES = {
 }
 
 
+def _get_enum_type(field_type: Type[Any]) -> pa.DataType:
+    is_str = [isinstance(enum_value.value, str) for enum_value in field_type]
+    if all(is_str):
+        return pa.dictionary(pa.int32(), pa.string())
+
+    is_int = [isinstance(enum_value.value, int) for enum_value in field_type]
+    if all(is_int):
+        return pa.int64()
+
+    msg = "Enums only allowed if all str or all int"
+    raise SchemaCreationError(msg)
+
+
 def _is_optional(field_type: Type[Any]) -> bool:
     origin = get_origin(field_type)
     is_python_39_union = origin is Union
@@ -140,6 +155,9 @@ def _get_pyarrow_type(
         raise SchemaCreationError(
             f"{field_type} only allowed if ok losing timezone information"
         )
+
+    if isinstance(field_type, EnumMeta):
+        return _get_enum_type(field_type)
 
     if field_type in TYPES_WITH_METADATA:
         return TYPES_WITH_METADATA[field_type](metadata)
