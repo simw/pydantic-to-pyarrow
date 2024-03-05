@@ -48,10 +48,10 @@ should manually specify the full schema.
 Python / Pydantic | Pyarrow | Overflow
 --- | --- | ---
 str | pa.string() |
-Literal[strings] | pa.dictionary(pa.int32(), pa.string())
+Literal[strings] | pa.dictionary(pa.int32(), pa.string()) |
 . | . | .
 int | pa.int64() if no minimum constraint, pa.uint64() if minimum is zero | Yes, at 2^63 (for signed) or 2^64 (for unsigned)
-Literal[ints] | pa.int64() | Yes, at 2^63
+Literal[ints] | pa.int64() |
 float | pa.float64() | Yes
 decimal.Decimal | pa.decimal128 ONLY if supplying max_digits and decimal_places for pydantic field | Yes
 . | . | .
@@ -64,6 +64,8 @@ pydantic.types.AwareDatetime | pa.timestamp("ms", tz=None) ONLY if param allow_l
 Optional[...] | The pyarrow field is nullable |
 Pydantic Model | pa.struct() |
 List[...] | pa.list_(...) |
+Enum of str | pa.dictionary(pa.int32(), pa.string()) | 
+Enum of int | pa.int64() |
 
 ## An Example
 
