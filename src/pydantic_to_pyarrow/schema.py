@@ -182,6 +182,8 @@ def _get_pyarrow_schema(
 ) -> pa.Schema:
     fields = []
     for name, field_info in pydantic_class.model_fields.items():
+        if field_info.exclude:
+            continue
         field_type = field_info.annotation
         metadata = field_info.metadata
 
