@@ -563,3 +563,26 @@ def test_exclude_fields_false() -> None:
     actual = get_pyarrow_schema(SimpleModel)
 
     assert actual == expected
+def test_dict() -> None:
+    class DictModel(BaseModel):
+        foo: Dict[str, int]
+
+    expected = pa.schema(
+        [
+            pa.field("foo", pa.map_(pa.string(), pa.int64()), nullable=False),
+        ]
+    )
+
+    objs = [
+        {"foo": {"a": 1, "b": 2}},
+        {"foo": {"c": 3, "d": 4, "e": 5}},
+    ]
+
+    actual = get_pyarrow_schema(DictModel)
+    assert actual == expected
+
+    new_schema, new_objs = _write_pq_and_read(objs, expected)
+    assert new_schema == expected
+
+    # pyarrow converts to tuples, need to convert back to dicts
+    assert objs == [{"foo": dict(t["foo"])} for t in new_objs]

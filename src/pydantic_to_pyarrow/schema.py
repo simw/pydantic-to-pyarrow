@@ -122,10 +122,34 @@ def _get_annotated_type(
     return _get_pyarrow_type(field_type, metadata, allow_losing_tz, exclude_fields)
 
 
+def _get_dict_type(
+    field_type: Type[Any],
+    metadata: List[Any],
+    allow_losing_tz: bool,
+    _exclude_fields: bool,
+) -> pa.DataType:
+    key_type, value_type = get_args(field_type)
+    return pa.map_(
+        _get_pyarrow_type(
+            key_type,
+            metadata,
+            allow_losing_tz=allow_losing_tz,
+            exclude_fields=_exclude_fields,
+        ),
+        _get_pyarrow_type(
+            value_type,
+            metadata,
+            allow_losing_tz=allow_losing_tz,
+            exclude_fields=_exclude_fields,
+        ),
+    )
+
+
 FIELD_TYPES = {
     Literal: _get_literal_type,
     list: _get_list_type,
     Annotated: _get_annotated_type,
+    dict: _get_dict_type,
 }
 
 
