@@ -74,7 +74,7 @@ TYPES_WITH_METADATA = {
 
 
 def _get_literal_type(
-    field_type: Type[Any], _metadata: List[Any], _allow_losing_tz: bool
+    field_type: Type[Any], _metadata: List[Any], _allow_losing_tz: bool, _exclude_fields: bool
 ) -> pa.DataType:
     values = get_args(field_type)
     if all(isinstance(value, str) for value in values):
@@ -89,17 +89,17 @@ def _get_literal_type(
 
 
 def _get_list_type(
-    field_type: Type[Any], metadata: List[Any], allow_losing_tz: bool
+    field_type: Type[Any], metadata: List[Any], allow_losing_tz: bool, _exclude_fields: bool
 ) -> pa.DataType:
     sub_type = get_args(field_type)[0]
     if _is_optional(sub_type):
         # pyarrow lists can have null elements in them
         sub_type = list(set(get_args(sub_type)) - {type(None)})[0]
-    return pa.list_(_get_pyarrow_type(sub_type, metadata, allow_losing_tz))
+    return pa.list_(_get_pyarrow_type(sub_type, metadata, allow_losing_tz, _exclude_fields))
 
 
 def _get_annotated_type(
-    field_type: Type[Any], metadata: List[Any], allow_losing_tz: bool
+    field_type: Type[Any], metadata: List[Any], allow_losing_tz: bool, exclude_fields: bool
 ) -> pa.DataType:
     # TODO: fix / clean up / understand why / if this works in all cases
     args = get_args(field_type)[1:]
@@ -108,7 +108,7 @@ def _get_annotated_type(
     ]
     metadata = [item for sublist in metadatas for item in sublist]
     field_type = cast(Type[Any], get_args(field_type)[0])
-    return _get_pyarrow_type(field_type, metadata, allow_losing_tz)
+    return _get_pyarrow_type(field_type, metadata, allow_losing_tz, exclude_fields)
 
 
 FIELD_TYPES = {
@@ -143,7 +143,7 @@ def _is_optional(field_type: Type[Any]) -> bool:
 
 
 def _get_pyarrow_type(
-    field_type: Type[Any], metadata: List[Any], allow_losing_tz: bool
+    field_type: Type[Any], metadata: List[Any], allow_losing_tz: bool, exclude_fields: bool
 ) -> pa.DataType:
     if field_type in FIELD_MAP:
         return FIELD_MAP[field_type]
@@ -164,13 +164,13 @@ def _get_pyarrow_type(
 
     if get_origin(field_type) in FIELD_TYPES:
         return FIELD_TYPES[get_origin(field_type)](
-            field_type, metadata, allow_losing_tz
+            field_type, metadata, allow_losing_tz, exclude_fields
         )
 
     # isinstance(filed_type, type) checks whether it's a class
     # otherwise eg Deque[int] would casue an exception on issubclass
     if isinstance(field_type, type) and issubclass(field_type, BaseModel):
-        return _get_pyarrow_schema(field_type, allow_losing_tz, as_schema=False)
+        return _get_pyarrow_schema(field_type, allow_losing_tz, exclude_fields, as_schema=False)
 
     raise SchemaCreationError(f"Unknown type: {field_type}")
 
@@ -178,11 +178,13 @@ def _get_pyarrow_type(
 def _get_pyarrow_schema(
     pydantic_class: Type[BaseModelType],
     allow_losing_tz: bool,
+    exclude_fields: bool,
     as_schema: bool = True,
+
 ) -> pa.Schema:
     fields = []
     for name, field_info in pydantic_class.model_fields.items():
-        if field_info.exclude:
+        if field_info.exclude and exclude_fields:
             continue
         field_type = field_info.annotation
         metadata = field_info.metadata
@@ -202,7 +204,7 @@ def _get_pyarrow_schema(
                 field_type = cast(Type[Any], types_under_union[0])
 
             pa_field = _get_pyarrow_type(
-                field_type, metadata, allow_losing_tz=allow_losing_tz
+                field_type, metadata, allow_losing_tz=allow_losing_tz, exclude_fields=exclude_fields
             )
         except Exception as err:  # noqa: BLE001 - ignore blind exception
             raise SchemaCreationError(
@@ -217,6 +219,6 @@ def _get_pyarrow_schema(
 
 
 def get_pyarrow_schema(
-    pydantic_class: Type[BaseModelType], allow_losing_tz: bool = False
+    pydantic_class: Type[BaseModelType], allow_losing_tz: bool = False, exclude_fields: bool = True
 ) -> pa.Schema:
-    return _get_pyarrow_schema(pydantic_class, allow_losing_tz)
+    return _get_pyarrow_schema(pydantic_class, allow_losing_tz, exclude_fields=exclude_fields)
