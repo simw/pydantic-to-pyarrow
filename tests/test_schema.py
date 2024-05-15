@@ -531,7 +531,8 @@ def test_enum_mixed() -> None:
     with pytest.raises(SchemaCreationError):
         get_pyarrow_schema(EnumModel)
 
-def test_exclude_field() -> None:
+
+def test_exclude_field_true() -> None:
     class SimpleModel(BaseModel):
         a: str
         b: str = Field(exclude=True)
@@ -542,7 +543,23 @@ def test_exclude_field() -> None:
         ]
     )
 
-    actual = get_pyarrow_schema(SimpleModel)
+    actual = get_pyarrow_schema(SimpleModel, exclude_fields=True)
 
     assert actual == expected
 
+
+def test_exclude_fields_false() -> None:
+    class SimpleModel(BaseModel):
+        a: str
+        b: str = Field(exclude=True)
+
+    expected = pa.schema(
+        [
+            pa.field("a", pa.string(), nullable=False),
+            pa.field("b", pa.string(), nullable=False),
+        ]
+    )
+
+    actual = get_pyarrow_schema(SimpleModel)
+
+    assert actual == expected
