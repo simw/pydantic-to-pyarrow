@@ -64,15 +64,19 @@ pydantic.types.AwareDatetime | pa.timestamp("ms", tz=None) ONLY if param allow_l
 Optional[...] | The pyarrow field is nullable |
 Pydantic Model | pa.struct() |
 List[...] | pa.list_(...) |
+Dict[..., ...] | pa.map_(pa key_type, pa value_type) |
 Enum of str | pa.dictionary(pa.int32(), pa.string()) | 
 Enum of int | pa.int64() |
+
+If a field is marked as exclude, (`Field(exclude=True)`), then it will be excluded
+from the pyarrow schema if exclude_fields is set to True.
 
 ## An Example
 
 ```py
-from typing import List, Optional
+from typing import Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pydantic_to_pyarrow import get_pyarrow_schema
 
 class NestedModel(BaseModel):
@@ -84,6 +88,8 @@ class MyModel(BaseModel):
     opt_str_field: Optional[str]
     py310_opt_str_field: str | None
     nested: List[NestedModel]
+    dict_field: Dict[str, int]
+    excluded_field: str = Field(exclude=True)
 
 
 pa_schema = get_pyarrow_schema(MyModel)
@@ -94,6 +100,10 @@ print(pa_schema)
 #> nested: list<item: struct<str_field: string not null>> not null
 #>   child 0, item: struct<str_field: string not null>
 #>       child 0, str_field: string not null
+#> dict_field: map<string, int64> not null
+#>   child 0, entries: struct<key: string not null, value: int64> not null
+#>       child 0, key: string not null
+#>       child 1, value: int64
 ```
 
 ## Development
