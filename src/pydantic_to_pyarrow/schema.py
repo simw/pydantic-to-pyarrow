@@ -145,19 +145,6 @@ def _get_dict_type(
     )
 
 
-def _get_dict_type(
-    field_type: Type[Any],
-    metadata: List[Any],
-    allow_losing_tz: bool,
-    _exclude_fields: bool,
-) -> pa.DataType:
-    key_type, value_type = get_args(field_type)
-    return pa.map_(
-        _get_pyarrow_type(key_type, metadata, allow_losing_tz=allow_losing_tz),
-        _get_pyarrow_type(value_type, metadata, allow_losing_tz=allow_losing_tz),
-    )
-
-
 FIELD_TYPES = {
     Literal: _get_literal_type,
     list: _get_list_type,
