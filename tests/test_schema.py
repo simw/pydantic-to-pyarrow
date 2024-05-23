@@ -531,7 +531,7 @@ def test_enum_mixed() -> None:
     with pytest.raises(SchemaCreationError):
         get_pyarrow_schema(EnumModel)
 
-        
+
 def test_exclude_field_true() -> None:
     class SimpleModel(BaseModel):
         a: str

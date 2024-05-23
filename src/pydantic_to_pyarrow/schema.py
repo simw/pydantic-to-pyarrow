@@ -146,7 +146,10 @@ def _get_dict_type(
 
 
 def _get_dict_type(
-    field_type: Type[Any], metadata: List[Any], allow_losing_tz: bool
+    field_type: Type[Any],
+    metadata: List[Any],
+    allow_losing_tz: bool,
+    _exclude_fields: bool,
 ) -> pa.DataType:
     key_type, value_type = get_args(field_type)
     return pa.map_(
