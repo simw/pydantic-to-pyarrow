@@ -2,7 +2,7 @@ import datetime
 import types
 from decimal import Decimal
 from enum import EnumMeta
-from typing import Any, List, Literal, Optional, Type, TypeVar, Union, cast
+from typing import Any, List, Literal, NamedTuple, Optional, Type, TypeVar, Union, cast
 
 import pyarrow as pa  # type: ignore
 from annotated_types import Ge, Gt
@@ -15,6 +15,12 @@ EnumType = TypeVar("EnumType", bound=EnumMeta)
 
 class SchemaCreationError(Exception):
     """Error when creating pyarrow schema."""
+
+
+class Settings(NamedTuple):
+    allow_losing_tz: bool
+    by_alias: bool
+    exclude_fields: bool
 
 
 FIELD_MAP = {
@@ -76,8 +82,7 @@ TYPES_WITH_METADATA = {
 def _get_literal_type(
     field_type: Type[Any],
     _metadata: List[Any],
-    _allow_losing_tz: bool,
-    _exclude_fields: bool,
+    _settings: Settings,
 ) -> pa.DataType:
     values = get_args(field_type)
     if all(isinstance(value, str) for value in values):
@@ -94,23 +99,19 @@ def _get_literal_type(
 def _get_list_type(
     field_type: Type[Any],
     metadata: List[Any],
-    allow_losing_tz: bool,
-    _exclude_fields: bool,
+    settings: Settings,
 ) -> pa.DataType:
     sub_type = get_args(field_type)[0]
     if _is_optional(sub_type):
         # pyarrow lists can have null elements in them
         sub_type = list(set(get_args(sub_type)) - {type(None)})[0]
-    return pa.list_(
-        _get_pyarrow_type(sub_type, metadata, allow_losing_tz, _exclude_fields)
-    )
+    return pa.list_(_get_pyarrow_type(sub_type, metadata, settings))
 
 
 def _get_annotated_type(
     field_type: Type[Any],
     metadata: List[Any],
-    allow_losing_tz: bool,
-    exclude_fields: bool,
+    settings: Settings,
 ) -> pa.DataType:
     # TODO: fix / clean up / understand why / if this works in all cases
     args = get_args(field_type)[1:]
@@ -119,29 +120,18 @@ def _get_annotated_type(
     ]
     metadata = [item for sublist in metadatas for item in sublist]
     field_type = cast(Type[Any], get_args(field_type)[0])
-    return _get_pyarrow_type(field_type, metadata, allow_losing_tz, exclude_fields)
+    return _get_pyarrow_type(field_type, metadata, settings)
 
 
 def _get_dict_type(
     field_type: Type[Any],
     metadata: List[Any],
-    allow_losing_tz: bool,
-    _exclude_fields: bool,
+    settings: Settings,
 ) -> pa.DataType:
     key_type, value_type = get_args(field_type)
     return pa.map_(
-        _get_pyarrow_type(
-            key_type,
-            metadata,
-            allow_losing_tz=allow_losing_tz,
-            exclude_fields=_exclude_fields,
-        ),
-        _get_pyarrow_type(
-            value_type,
-            metadata,
-            allow_losing_tz=allow_losing_tz,
-            exclude_fields=_exclude_fields,
-        ),
+        _get_pyarrow_type(key_type, metadata, settings),
+        _get_pyarrow_type(value_type, metadata, settings),
     )
 
 
@@ -180,16 +170,15 @@ def _is_optional(field_type: Type[Any]) -> bool:
 def _get_pyarrow_type(
     field_type: Type[Any],
     metadata: List[Any],
-    allow_losing_tz: bool,
-    exclude_fields: bool,
+    settings: Settings,
 ) -> pa.DataType:
     if field_type in FIELD_MAP:
         return FIELD_MAP[field_type]
 
-    if allow_losing_tz and field_type in LOSING_TZ_TYPES:
+    if settings.allow_losing_tz and field_type in LOSING_TZ_TYPES:
         return LOSING_TZ_TYPES[field_type]
 
-    if not allow_losing_tz and field_type in LOSING_TZ_TYPES:
+    if not settings.allow_losing_tz and field_type in LOSING_TZ_TYPES:
         raise SchemaCreationError(
             f"{field_type} only allowed if ok losing timezone information"
         )
@@ -202,28 +191,27 @@ def _get_pyarrow_type(
 
     if get_origin(field_type) in FIELD_TYPES:
         return FIELD_TYPES[get_origin(field_type)](
-            field_type, metadata, allow_losing_tz, exclude_fields
+            field_type,
+            metadata,
+            settings,
         )
 
     # isinstance(filed_type, type) checks whether it's a class
     # otherwise eg Deque[int] would casue an exception on issubclass
     if isinstance(field_type, type) and issubclass(field_type, BaseModel):
-        return _get_pyarrow_schema(
-            field_type, allow_losing_tz, exclude_fields, as_schema=False
-        )
+        return _get_pyarrow_schema(field_type, settings, as_schema=False)
 
     raise SchemaCreationError(f"Unknown type: {field_type}")
 
 
 def _get_pyarrow_schema(
     pydantic_class: Type[BaseModelType],
-    allow_losing_tz: bool,
-    exclude_fields: bool,
+    settings: Settings,
     as_schema: bool = True,
 ) -> pa.Schema:
     fields = []
     for name, field_info in pydantic_class.model_fields.items():
-        if field_info.exclude and exclude_fields:
+        if field_info.exclude and settings.exclude_fields:
             continue
         field_type = field_info.annotation
         metadata = field_info.metadata
@@ -242,12 +230,7 @@ def _get_pyarrow_schema(
                 # mypy infers field_type as Type[Any] | None here, hence casting
                 field_type = cast(Type[Any], types_under_union[0])
 
-            pa_field = _get_pyarrow_type(
-                field_type,
-                metadata,
-                allow_losing_tz=allow_losing_tz,
-                exclude_fields=exclude_fields,
-            )
+            pa_field = _get_pyarrow_type(field_type, metadata, settings)
         except Exception as err:  # noqa: BLE001 - ignore blind exception
             raise SchemaCreationError(
                 f"Error processing field {name}: {field_type}, {err}"
@@ -264,6 +247,7 @@ def get_pyarrow_schema(
     pydantic_class: Type[BaseModelType],
     allow_losing_tz: bool = False,
     exclude_fields: bool = False,
+    by_alias: bool = False,
 ) -> pa.Schema:
     """
     Converts a Pydantic model into a PyArrow schema.
@@ -271,13 +255,18 @@ def get_pyarrow_schema(
     Args:
         pydantic_class (Type[BaseModelType]): The Pydantic model class to convert.
         allow_losing_tz (bool, optional): Whether to allow losing timezone information
-        when converting datetime fields. Defaults to False.
+            when converting datetime fields. Defaults to False.
         exclude_fields (bool, optional): If True, will exclude fields in the pydantic
-        model that have `Field(exclude=True)`. Defaults to False.
+            model that have `Field(exclude=True)`. Defaults to False.
+        by_alis (bool, optional): If True, will create the pyarrow schema using the
+            (serialization) alias in the pydantic model. Defaults to False.
 
     Returns:
         pa.Schema: The PyArrow schema representing the Pydantic model.
     """
-    return _get_pyarrow_schema(
-        pydantic_class, allow_losing_tz, exclude_fields=exclude_fields
+    settings = Settings(
+        allow_losing_tz=allow_losing_tz,
+        by_alias=by_alias,
+        exclude_fields=exclude_fields,
     )
+    return _get_pyarrow_schema(pydantic_class, settings)
