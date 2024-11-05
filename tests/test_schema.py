@@ -7,9 +7,11 @@ from typing import Any, Deque, Dict, List, Literal, Optional, Tuple
 
 import pyarrow as pa  # type: ignore
 import pyarrow.parquet as pq  # type: ignore
+import pydantic
 import pytest
 from annotated_types import Gt
-from pydantic import BaseModel, Field
+from packaging import version
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic.types import (
     AwareDatetime,
     NaiveDatetime,
@@ -588,3 +590,96 @@ def test_dict() -> None:
 
     # pyarrow converts to tuples, need to convert back to dicts
     assert objs == [{"foo": dict(t["foo"])} for t in new_objs]
+
+
+def test_alias() -> None:
+    class AliasModel(BaseModel):
+        field1: str
+        field2: str = Field(alias="b2")
+        field3: str = Field(validation_alias="b3")
+        field4: str = Field(serialization_alias="b4")
+        field5: str = Field(alias="b5", serialization_alias="c5")
+        field6: Annotated[str, Field(alias="b6")]
+
+    expected_no_alias = pa.schema(
+        [
+            pa.field("field1", pa.string(), nullable=False),
+            pa.field("field2", pa.string(), nullable=False),
+            pa.field("field3", pa.string(), nullable=False),
+            pa.field("field4", pa.string(), nullable=False),
+            pa.field("field5", pa.string(), nullable=False),
+            pa.field("field6", pa.string(), nullable=False),
+        ]
+    )
+
+    actual_no_alias = get_pyarrow_schema(AliasModel)
+    assert actual_no_alias == expected_no_alias
+
+    expected_by_alias = pa.schema(
+        [
+            pa.field("field1", pa.string(), nullable=False),
+            pa.field("b2", pa.string(), nullable=False),
+            pa.field("field3", pa.string(), nullable=False),
+            pa.field("b4", pa.string(), nullable=False),
+            pa.field("c5", pa.string(), nullable=False),
+            pa.field("b6", pa.string(), nullable=False),
+        ]
+    )
+    actual_by_alias = get_pyarrow_schema(AliasModel, by_alias=True)
+    assert actual_by_alias == expected_by_alias
+
+
+def test_alias_generator() -> None:
+    class AliasModel(BaseModel):
+        model_config = ConfigDict(alias_generator=lambda field_name: field_name.upper())
+        field1: str
+        field2: str = Field(alias="b2")
+        field3: str = Field(validation_alias="b3")
+        field4: str = Field(serialization_alias="b4")
+        field5: str = Field(alias="b5", serialization_alias="c5")
+        field6: str = Field(alias="b6", alias_priority=1)
+
+    expected_no_alias = pa.schema(
+        [
+            pa.field("field1", pa.string(), nullable=False),
+            pa.field("field2", pa.string(), nullable=False),
+            pa.field("field3", pa.string(), nullable=False),
+            pa.field("field4", pa.string(), nullable=False),
+            pa.field("field5", pa.string(), nullable=False),
+            pa.field("field6", pa.string(), nullable=False),
+        ]
+    )
+
+    actual_no_alias = get_pyarrow_schema(AliasModel)
+    assert actual_no_alias == expected_no_alias
+
+    expected_by_alias = pa.schema(
+        [
+            pa.field("FIELD1", pa.string(), nullable=False),
+            pa.field("b2", pa.string(), nullable=False),
+            pa.field("FIELD3", pa.string(), nullable=False),
+            pa.field("b4", pa.string(), nullable=False),
+            pa.field("c5", pa.string(), nullable=False),
+            pa.field("FIELD6", pa.string(), nullable=False),
+        ]
+    )
+
+    pydantic_version = version.parse(pydantic.__version__)
+    if pydantic_version < version.parse("2.5.0"):
+        # pydantic 2.5.0 fixed an issue / bug, that setting validation_alias
+        # would then remove the alias_generator from the serialization_alias
+        # This library follows the functionality in the installed version
+        # of pydantic.
+        expected_by_alias = pa.schema(
+            [
+                pa.field("FIELD1", pa.string(), nullable=False),
+                pa.field("b2", pa.string(), nullable=False),
+                pa.field("field3", pa.string(), nullable=False),
+                pa.field("b4", pa.string(), nullable=False),
+                pa.field("c5", pa.string(), nullable=False),
+                pa.field("FIELD6", pa.string(), nullable=False),
+            ]
+        )
+
+    actual_by_alias = get_pyarrow_schema(AliasModel, by_alias=True)
+    assert actual_by_alias == expected_by_alias

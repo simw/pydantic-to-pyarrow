@@ -4,9 +4,14 @@
 [![pypi](https://img.shields.io/pypi/v/pydantic-to-pyarrow.svg)](https://pypi.python.org/pypi/pydantic-to-pyarrow)
 [![versions](https://img.shields.io/pypi/pyversions/pydantic-to-pyarrow.svg)](https://github.com/simw/pydantic-to-pyarrow)
 [![license](https://img.shields.io/github/license/simw/pydantic-to-pyarrow.svg)](https://github.com/simw/pydantic-to-pyarrow/blob/main/LICENSE)
+[![Download Stats](https://img.shields.io/pypi/dm/pydantic-to-pyarrow)](https://pypistats.org/packages/pydantic-to-pyarrow)
 
 pydantic-to-pyarrow is a library for Python to help with conversion
 of pydantic models to pyarrow schemas.
+
+(Please note that this project is not affiliated in any way with the
+great teams at [pydantic](https://github.com/pydantic/pydantic) or
+[pyarrow](https://github.com/apache/arrow).)
 
 [pydantic](https://github.com/pydantic/pydantic) is a Python library
 for data validation, applying type hints / annotations. It enables
@@ -27,7 +32,7 @@ processing pipeline:
 The easiest approach for steps 3 and 4 above is to let pyarrow infer
 the schema from the data. The most involved approach is to
 specify the pyarrow schema separate from the pydantic model. In the middle, many
-application could benefit from converting the pydantic model to a
+applications could benefit from converting the pydantic model to a
 pyarrow schema. This library aims to achieve that.
 
 ## Installation
@@ -68,8 +73,17 @@ Dict[..., ...] | pa.map_(pa key_type, pa value_type) |
 Enum of str | pa.dictionary(pa.int32(), pa.string()) | 
 Enum of int | pa.int64() |
 
-If a field is marked as exclude, (`Field(exclude=True)`), then it will be excluded
-from the pyarrow schema if exclude_fields is set to True.
+## Settings
+
+In a model, if a field is marked as exclude, `Field(exclude=True)`, then it will be excluded
+from the pyarrow schema if `get_pyarrow_schema` is called with `exclude_fields=True` (defaults to False).
+
+If `get_pyarrow_schema` is called with `allow_losing_tz=True`, then it will allow conversion
+of timezone-aware python datetimes to non-timezone aware pyarrow timestamps
+(defaults to False - and loss of timezone information will raise an exception).
+
+By default, `get_pyarrow_schema` will use the field names for the pyarrow schema fields. If
+`by_alias=True` is supplied, then the serialization_alias is used. More information about aliases is available in the [Pydantic documentation](https://docs.pydantic.dev/latest/concepts/alias/).
 
 ## An Example
 

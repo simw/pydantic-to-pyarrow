@@ -58,6 +58,7 @@ mypy = "^1.6.0"
 [tool.poetry.group.test.dependencies]
 pytest = "^7.4.2"
 coverage = "^7.3.2"
+packaging = "^24.1"
 
 
 [tool.mypy]
