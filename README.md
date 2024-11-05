@@ -73,8 +73,17 @@ Dict[..., ...] | pa.map_(pa key_type, pa value_type) |
 Enum of str | pa.dictionary(pa.int32(), pa.string()) | 
 Enum of int | pa.int64() |
 
-If a field is marked as exclude, (`Field(exclude=True)`), then it will be excluded
-from the pyarrow schema if exclude_fields is set to True.
+## Settings
+
+In a model, if a field is marked as exclude, `Field(exclude=True)`, then it will be excluded
+from the pyarrow schema if `get_pyarrow_schema` is called with `exclude_fields=True` (defaults to False).
+
+If `get_pyarrow_schema` is called with `allow_losing_tz=True`, then it will allow conversion
+of timezone-aware python datetimes to non-timezone aware pyarrow timestamps
+(defaults to False - and loss of timezone information will raise an exception).
+
+By default, `get_pyarrow_schema` will use the field names for the pyarrow schema fields. If
+`by_alias=True` is supplied, then the serialization_alias is used. More information about aliases is available in the [Pydantic documentation](https://docs.pydantic.dev/latest/concepts/alias/).
 
 ## An Example
 
