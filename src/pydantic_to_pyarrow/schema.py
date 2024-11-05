@@ -236,7 +236,10 @@ def _get_pyarrow_schema(
                 f"Error processing field {name}: {field_type}, {err}"
             ) from err
 
-        fields.append(pa.field(name, pa_field, nullable=nullable))
+        serialized_name = name
+        if settings.by_alias and field_info.serialization_alias is not None:
+            serialized_name = field_info.serialization_alias
+        fields.append(pa.field(serialized_name, pa_field, nullable=nullable))
 
     if as_schema:
         return pa.schema(fields)
