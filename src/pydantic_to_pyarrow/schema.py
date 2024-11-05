@@ -261,7 +261,7 @@ def get_pyarrow_schema(
             when converting datetime fields. Defaults to False.
         exclude_fields (bool, optional): If True, will exclude fields in the pydantic
             model that have `Field(exclude=True)`. Defaults to False.
-        by_alis (bool, optional): If True, will create the pyarrow schema using the
+        by_alias (bool, optional): If True, will create the pyarrow schema using the
             (serialization) alias in the pydantic model. Defaults to False.
 
     Returns:
