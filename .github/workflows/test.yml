@@ -37,7 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
     - uses: actions/checkout@v4
 
@@ -67,4 +67,4 @@ jobs:
       run: make test
 
     - name: Run tests on different dependency versions
-      run: make test-dep-versions
+      run: python3 -m pip install nox && make test-dep-versions
