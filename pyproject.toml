@@ -27,6 +27,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
 ]
@@ -36,14 +37,14 @@ packages = [{include = "pydantic_to_pyarrow", from = "src"}]
 python = "^3.8"
 pydantic = "^2.0"
 pyarrow = [
-    { version = ">=13.0.0,<15.0.0", python = "<3.12" },
-    { version = ">=14.0.0,<15.0.0", python = ">=3.12,<3.13" },
+    { version = ">=11.0.0" },
+    { version = ">=18.0.0", python = ">=3.13" },
 ]
 # We don't have a direct numpy dependency, but pyarrow depends on numpy
 # and numpy has python version constraints
 numpy = [
     { version = "<1.25.0", python = "<3.9" },
-    { version = "^1.26.0", python = ">=3.12,<3.13" }
+    { version = ">=1.26.0", python = ">=3.12" },
 ]
 # pydantic 2.x requires 4.6.1, so no point going lower
 typing-extensions = "^4.6.1"

@@ -41,6 +41,12 @@ pyarrow schema. This library aims to achieve that.
 pip install pydantic-to-pyarrow
 ```
 
+Note: PyArrow versions < 15 are only compatible with NumPy 1.x, but
+they do not express this in their dependency constraints. If other constraints
+are forcing you to use PyArrow < 15 on Python 3.9+, and you see errors like
+'A module that was compiled using NumPy 1.x cannot be run in Numpy 2.x ...',
+then try forcing NumPy 1.x in your project's dependencies.
+
 ## Conversion Table
 
 The below conversions still run into the possibility of

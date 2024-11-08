@@ -30,18 +30,8 @@ test: prepare
 
 .PHONY: test-dep-versions
 test-dep-versions: prepare
-	poetry run pip install pyarrow==14.0.0
-	poetry run python -m pytest
+	nox
 
-	poetry run pip install pydantic==2.0.3
-	poetry run python -m pytest
-
-	# Change in alias functionality in 2.5.0
-	poetry run pip install pydantic==2.4.2
-	poetry run python -m pytest
-
-	poetry run pip install pydantic==2.9.2
-	poetry run python -m pytest
 
 .PHONY: clean
 clean:
