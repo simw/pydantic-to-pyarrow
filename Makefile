@@ -4,28 +4,27 @@ sources = src tests
 
 .PHONY: prepare
 prepare:
-	poetry install
+	uv sync
 
 
 .PHONY: lintable
 lintable: prepare
-	poetry run black $(sources)
-	poetry run ruff --fix $(sources)
+	uv run black $(sources)
+	uv run ruff check --fix $(sources)
 
 
 .PHONY: lint
 lint: prepare
-	poetry check
-	poetry run black --check --diff $(sources)
-	poetry run ruff check $(sources)
-	poetry run mypy $(sources)
+	uv run black --check --diff $(sources)
+	uv run ruff check $(sources)
+	uv run mypy $(sources)
 
 
 
 .PHONY: test
 test: prepare
-	poetry run coverage run -m pytest
-	poetry run coverage report
+	uv run coverage run -m pytest
+	uv run coverage report
 
 
 .PHONY: test-dep-versions
@@ -53,7 +52,7 @@ clean:
 
 .PHONY: package
 package: prepare
-	poetry build
+	uv build
 
 
 .PHONY: help

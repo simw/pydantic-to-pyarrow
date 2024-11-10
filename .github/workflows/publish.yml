@@ -12,8 +12,11 @@ jobs:
     - uses: actions/checkout@v4
     - uses: actions/setup-python@v5
       with:
-        python-version: "3.12"
-    - run: curl -sSL https://install.python-poetry.org | python - -y
+        python-version: "3.13"
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "0.5.1"
     - run: make lint
     
   test:
@@ -26,8 +29,10 @@ jobs:
     - uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
-    - run: curl -sSL https://install.python-poetry.org | python - -y
-    - run: poetry config virtualenvs.in-project true
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "0.5.1"
     - run: make test
     - run: python3 -m pip install nox && make test-dep-versions
 
@@ -47,7 +52,7 @@ jobs:
       with:
         version_file_path: src/pydantic_to_pyarrow/__init__.py
     - run: make package
-    - uses: actions/upload-artifact@v3
+    - uses: actions/upload-artifact@v4
       with:
         path: dist/*
         name: package
@@ -61,7 +66,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: package
           path: dist

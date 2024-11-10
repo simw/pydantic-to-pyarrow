@@ -11,23 +11,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: "3.11"
-    - name: Bootstrap poetry
-      run: curl -sSL https://install.python-poetry.org | python - -y
+        python-version: "3.13"
 
-    - name: Get full Python version
-      id: full-python-version
-      run: echo version=$(python -c "import sys; print('-'.join(str(v) for v in sys.version_info))") >> $GITHUB_OUTPUT
-
-    - name: Set up cache
-      uses: actions/cache@v4
-      id: cache
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
       with:
-        path: .venv
-        key: venv-${{ runner.os }}-${{ steps.full-python-version.outputs.version }}-${{ hashFiles('**/poetry.lock') }}
+        version: "0.5.1"
 
     - name: Lint
       run: make lint
@@ -46,22 +39,10 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Bootstrap poetry
-      run: curl -sSL https://install.python-poetry.org | python - -y
-
-    - name: Configure poetry
-      run: poetry config virtualenvs.in-project true
-
-    - name: Get full Python version
-      id: full-python-version
-      run: echo version=$(python -c "import sys; print('-'.join(str(v) for v in sys.version_info))") >> $GITHUB_OUTPUT
-
-    - name: Set up cache
-      uses: actions/cache@v4
-      id: cache
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
       with:
-        path: .venv
-        key: venv-${{ runner.os }}-${{ steps.full-python-version.outputs.version }}-${{ hashFiles('**/poetry.lock') }}
+        version: "0.5.1"
 
     - name: Run tests
       run: make test
