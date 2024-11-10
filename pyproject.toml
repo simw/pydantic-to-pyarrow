@@ -1,6 +1,6 @@
 [project]
 name = "pydantic-to-pyarrow"
-version = "0.1.5"
+dynamic = ["version"]
 description = "Conversion from pydantic models to pyarrow schemas"
 authors = [
     {name = "Simon Wicks", email = "simw@users.noreply.github.com"}
@@ -57,6 +57,10 @@ Issues = "https://github.com/simw/pydantic-to-pyarrow/issues"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+
+[tool.hatch.version]
+path = "src/pydantic_to_pyarrow/__init__.py"
 
 
 [tool.uv]
