@@ -1,9 +1,9 @@
-from enum import StrEnum
+from enum import Enum
 
 import nox
 
 
-class Result(StrEnum):
+class Result(Enum):
     SUCCESS = "Success"
     FAILURE = "Failure"
     SKIPPED = "Skipped"
