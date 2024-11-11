@@ -130,7 +130,8 @@ print(pa_schema)
 
 Prerequisites:
 
-- Any Python 3.8 through 3.11
-- [poetry](https://github.com/python-poetry/poetry) for dependency management
+- Any Python 3.8 through 3.13
+- [uv](https://github.com/astral-sh/uv) for dependency management
 - git
 - make
+- [nox](https://nox.thea.codes/en/stable/index.html) (to run tests across dependency versions)
