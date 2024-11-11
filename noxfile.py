@@ -23,7 +23,7 @@ PYARROW = [
 NUMPY = ["1.24.4", "1.26.4", "2.0.2", "2.1.3"]
 
 
-@nox.session(python=False)
+@nox.session(venv_backend="uv")
 def test_pydantic_versions(session) -> None:
     """
     Pydantic has a change in alias behavior in 2.5.0, where
@@ -35,8 +35,7 @@ def test_pydantic_versions(session) -> None:
     The code tests for this, so running on multiple versions of pydantic
     checks that this is handled correctly.
     """
-    session.run("uv", "sync")
-    value = session.run("uv", "run", "--no-sync", "python", "--version", silent=True)
+    value = session.run("python", "--version", silent=True)
     version_list = value.lstrip("Python ").split(".")[0:2]
     version = ".".join(version_list)
     print(f"Python version: {version}")
@@ -62,10 +61,9 @@ def test_pydantic_versions(session) -> None:
         raise Exception("Test failed")
 
 
-@nox.session(python=False)
+@nox.session(venv_backend="uv")
 def test_pyarrow_versions(session) -> None:
-    session.run("uv", "sync")
-    value = session.run("uv", "run", "--no-sync", "python", "--version", silent=True)
+    value = session.run("python", "--version", silent=True)
     version_list = value.lstrip("Python ").split(".")[0:2]
     version = ".".join(version_list)
     print(f"Python version: {version}")
@@ -123,11 +121,12 @@ def test_pyarrow_versions(session) -> None:
 
 
 def run_tests(session, deps) -> Result:
-    session.run("uv", "sync")
+    env = {"UV_PROJECT_ENVIRONMENT": session.virtualenv.location}
+    session.run_install("uv", "sync", "--locked", env=env)
     dep_list = [f"{k}=={v}" for k, v in deps.items()]
     try:
-        session.run("uv", "pip", "install", *dep_list)
-        session.run("uv", "run", "python", "-m", "pytest")
+        session.install(*dep_list)
+        session.run("python", "-m", "pytest")
         return Result.SUCCESS
     except Exception:
         return Result.FAILURE

@@ -4,7 +4,7 @@ sources = src tests
 
 .PHONY: prepare
 prepare:
-	uv sync
+	uv sync --locked
 
 
 .PHONY: lintable
