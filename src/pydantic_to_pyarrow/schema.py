@@ -1,5 +1,6 @@
 import datetime
 import types
+import uuid
 from decimal import Decimal
 from enum import EnumMeta
 from typing import Any, List, Literal, NamedTuple, Optional, Type, TypeVar, Union, cast
@@ -31,6 +32,7 @@ FIELD_MAP = {
     datetime.date: pa.date32(),
     NaiveDatetime: pa.timestamp("ms", tz=None),
     datetime.time: pa.time64("us"),
+    uuid.UUID: pa.uuid(),
 }
 
 # Timezone aware datetimes will lose their timezone information

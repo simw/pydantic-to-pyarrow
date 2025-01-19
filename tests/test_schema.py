@@ -1,5 +1,6 @@
 import datetime
 import tempfile
+import uuid
 from decimal import Decimal
 from enum import Enum, auto
 from pathlib import Path
@@ -11,8 +12,12 @@ import pydantic
 import pytest
 from annotated_types import Gt
 from packaging import version
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
 from pydantic.types import (
+    UUID1,
+    UUID3,
+    UUID4,
+    UUID5,
     AwareDatetime,
     NaiveDatetime,
     PositiveInt,
@@ -26,6 +31,12 @@ from pydantic.types import (
 from typing_extensions import Annotated
 
 from pydantic_to_pyarrow import SchemaCreationError, get_pyarrow_schema
+
+_uuid_bytes_serializer = PlainSerializer(lambda x: x.bytes, return_type=bytes)
+_ByteSerializedUUID1Field = Annotated[UUID1, _uuid_bytes_serializer]
+_ByteSerializedUUID3Field = Annotated[UUID3, _uuid_bytes_serializer]
+_ByteSerializedUUID4Field = Annotated[UUID4, _uuid_bytes_serializer]
+_ByteSerializedUUID5Field = Annotated[UUID5, _uuid_bytes_serializer]
 
 
 def _write_pq_and_read(
@@ -590,6 +601,38 @@ def test_dict() -> None:
 
     # pyarrow converts to tuples, need to convert back to dicts
     assert objs == [{"foo": dict(t["foo"])} for t in new_objs]
+
+
+def test_uuid() -> None:
+    class ModelWithUUID(BaseModel):
+        foo_1: _ByteSerializedUUID1Field = Field(default_factory=uuid.uuid1)
+        foo_3: _ByteSerializedUUID3Field = Field(
+            default_factory=lambda: uuid.uuid3(uuid.NAMESPACE_DNS, "pydantic.org")
+        )
+        foo_4: _ByteSerializedUUID4Field = Field(default_factory=uuid.uuid4)
+        foo_5: _ByteSerializedUUID5Field = Field(
+            default_factory=lambda: uuid.uuid5(uuid.NAMESPACE_DNS, "pydantic.org")
+        )
+
+    expected = pa.schema(
+        [
+            pa.field("foo_1", pa.uuid(), nullable=False),
+            pa.field("foo_3", pa.uuid(), nullable=False),
+            pa.field("foo_4", pa.uuid(), nullable=False),
+            pa.field("foo_5", pa.uuid(), nullable=False),
+        ]
+    )
+
+    objs = [
+        ModelWithUUID().model_dump(),
+        ModelWithUUID().model_dump(),
+    ]
+
+    actual = get_pyarrow_schema(ModelWithUUID)
+    assert actual == expected
+
+    new_schema, new_objs = _write_pq_and_read(objs, expected)
+    assert new_schema == expected
 
 
 def test_alias() -> None:
