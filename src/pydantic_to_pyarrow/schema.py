@@ -32,7 +32,6 @@ FIELD_MAP = {
     datetime.date: pa.date32(),
     NaiveDatetime: pa.timestamp("ms", tz=None),
     datetime.time: pa.time64("us"),
-    uuid.UUID: pa.uuid(),
 }
 
 # Timezone aware datetimes will lose their timezone information
@@ -158,6 +157,18 @@ def _get_enum_type(field_type: Type[Any]) -> pa.DataType:
     raise SchemaCreationError(msg)
 
 
+def _get_uuid_type() -> pa.DataType:
+    # Different branches will execute depending on the pyarrow version
+    # This is tested through nox and python versions, but each one
+    # won't cover both branches. Hence, excluding from coverage.
+    if hasattr(pa, "uuid"):  # pragma: no cover
+        return pa.uuid()
+    else:  # pragma: no cover
+        msg = f"pyarrow version {pa.__version__} does not support pa.uuid() type, "
+        msg += "needs version 18.0 or higher"
+        raise SchemaCreationError(msg)
+
+
 def _is_optional(field_type: Type[Any]) -> bool:
     origin = get_origin(field_type)
     is_python_39_union = origin is Union
@@ -169,13 +180,18 @@ def _is_optional(field_type: Type[Any]) -> bool:
     return type(None) in get_args(field_type)
 
 
-def _get_pyarrow_type(
+# noqa: PLR0911 - ignore until a refactoring can reduce the number of
+# return statements.
+def _get_pyarrow_type(  # noqa: PLR0911
     field_type: Type[Any],
     metadata: List[Any],
     settings: Settings,
 ) -> pa.DataType:
     if field_type in FIELD_MAP:
         return FIELD_MAP[field_type]
+
+    if field_type is uuid.UUID:
+        return _get_uuid_type()
 
     if settings.allow_losing_tz and field_type in LOSING_TZ_TYPES:
         return LOSING_TZ_TYPES[field_type]
