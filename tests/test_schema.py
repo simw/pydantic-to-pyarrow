@@ -1,5 +1,6 @@
 import datetime
 import tempfile
+import uuid
 from decimal import Decimal
 from enum import Enum, auto
 from pathlib import Path
@@ -11,8 +12,12 @@ import pydantic
 import pytest
 from annotated_types import Gt
 from packaging import version
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
 from pydantic.types import (
+    UUID1,
+    UUID3,
+    UUID4,
+    UUID5,
     AwareDatetime,
     NaiveDatetime,
     PositiveInt,
@@ -590,6 +595,57 @@ def test_dict() -> None:
 
     # pyarrow converts to tuples, need to convert back to dicts
     assert objs == [{"foo": dict(t["foo"])} for t in new_objs]
+
+
+def test_uuid() -> None:
+    # pyarrow 18.0.0+ is required for UUID support
+    # Even then, pyarrow doesn't automatically convert UUIDs to bytes
+    # for the serialization, so we need to do that manually
+    # (https://github.com/apache/arrow/issues/43855)
+    as_bytes = PlainSerializer(lambda x: x.bytes, return_type=bytes)
+
+    class ModelWithUUID(BaseModel):
+        foo_0: Annotated[uuid.UUID, as_bytes] = Field(default_factory=uuid.uuid1)
+        foo_1: Annotated[UUID1, as_bytes] = Field(default_factory=uuid.uuid1)
+        foo_3: Annotated[UUID3, as_bytes] = Field(
+            default_factory=lambda: uuid.uuid3(uuid.NAMESPACE_DNS, "pydantic.org")
+        )
+        foo_4: Annotated[UUID4, as_bytes] = Field(default_factory=uuid.uuid4)
+        foo_5: Annotated[UUID5, as_bytes] = Field(
+            default_factory=lambda: uuid.uuid5(uuid.NAMESPACE_DNS, "pydantic.org")
+        )
+
+    if version.Version(pa.__version__) < version.Version("18.0.0"):
+        with pytest.raises(SchemaCreationError) as err:
+            get_pyarrow_schema(ModelWithUUID)
+        assert "needs version 18.0 or higher" in str(err)
+    else:
+        expected = pa.schema(
+            [
+                pa.field("foo_0", pa.uuid(), nullable=False),
+                pa.field("foo_1", pa.uuid(), nullable=False),
+                pa.field("foo_3", pa.uuid(), nullable=False),
+                pa.field("foo_4", pa.uuid(), nullable=False),
+                pa.field("foo_5", pa.uuid(), nullable=False),
+            ]
+        )
+
+        actual = get_pyarrow_schema(ModelWithUUID)
+        assert actual == expected
+
+        objs = [
+            ModelWithUUID().model_dump(),
+            ModelWithUUID().model_dump(),
+        ]
+
+        new_schema, new_objs = _write_pq_and_read(objs, expected)
+        assert new_schema == expected
+        # objs was created with the uuid serializer to bytes,
+        # but pyarrow will read the uuids into UUID objects directly
+        for obj in objs:
+            for key in obj:
+                obj[key] = uuid.UUID(bytes=obj[key])
+        assert new_objs == objs
 
 
 def test_alias() -> None:

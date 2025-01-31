@@ -78,6 +78,39 @@ List[...] | pa.list_(...) |
 Dict[..., ...] | pa.map_(pa key_type, pa value_type) |
 Enum of str | pa.dictionary(pa.int32(), pa.string()) | 
 Enum of int | pa.int64() |
+UUID (uuid.UUID or pydantic.types.UUID*) | pa.uuid() | SEE NOTE BELOW!
+
+Note on UUIDs: the UUID type is only supported in pyarrow 18.0 and above. However,
+as of pyarrow 19.0, when pyarrow creates a table in eg `pa.Table.from_pylist(objs, schema=schema)`,
+it expects bytes not a uuid.UUID type. Hence, if you are using .model_dump() to create
+the data for pyarrow, you need to add a serializer on your pydantic model to convert to bytes.
+This may be fixed in later versions (see [https://github.com/apache/arrow/issues/43855]).
+
+eg (with pyarrow >= 18.0):
+```py
+import uuid
+from typing import Annotated
+
+import pyarrow as pa
+from pydantic import BaseModel, PlainSerializer
+from pydantic_to_pyarrow import get_pyarrow_schema
+
+class ModelWithUuid(BaseModel):
+    uuid: Annotated[uuid.UUID, PlainSerializer(lambda x: x.bytes, return_type=bytes)]
+
+
+schema = get_pyarrow_schema(ModelWithUuid)
+
+model1 = ModelWithUuid(uuid=uuid.uuid1())
+model2 = ModelWithUuid(uuid=uuid.uuid4())
+data = [model1.model_dump(), model2.model_dump()]
+table = pa.Table.from_pylist(data)
+print(table)
+#> pyarrow.Table
+#> uuid: binary
+#> ----
+#> uuid: [[BF206AC0DA4711EF8271EF4F4B7A3587,211C4C5D94C74876AE5E32DBCCDC16C7]]
+```
 
 ## Settings
 
