@@ -1,6 +1,7 @@
 import datetime
 import types
 import uuid
+from collections import defaultdict
 from decimal import Decimal
 from enum import EnumMeta
 from typing import Any, List, Literal, NamedTuple, Optional, Type, TypeVar, Union, cast
@@ -24,15 +25,18 @@ class Settings(NamedTuple):
     exclude_fields: bool
 
 
-FIELD_MAP = {
-    str: pa.string(),
-    bytes: pa.binary(),
-    bool: pa.bool_(),
-    float: pa.float64(),
-    datetime.date: pa.date32(),
-    NaiveDatetime: pa.timestamp("ms", tz=None),
-    datetime.time: pa.time64("us"),
-}
+FIELD_MAP = defaultdict(
+    lambda: pa.binary(),
+    {
+        str: pa.string(),
+        bytes: pa.binary(),
+        bool: pa.bool_(),
+        float: pa.float64(),
+        datetime.date: pa.date32(),
+        NaiveDatetime: pa.timestamp("ms", tz=None),
+        datetime.time: pa.time64("us"),
+    }
+)
 
 # Timezone aware datetimes will lose their timezone information
 # (but be correctly converted to UTC) when converted to pyarrow.
@@ -187,9 +191,6 @@ def _get_pyarrow_type(  # noqa: PLR0911
     metadata: List[Any],
     settings: Settings,
 ) -> pa.DataType:
-    if field_type in FIELD_MAP:
-        return FIELD_MAP[field_type]
-
     if field_type is uuid.UUID:
         return _get_uuid_type()
 
@@ -219,7 +220,7 @@ def _get_pyarrow_type(  # noqa: PLR0911
     if isinstance(field_type, type) and issubclass(field_type, BaseModel):
         return _get_pyarrow_schema(field_type, settings, as_schema=False)
 
-    raise SchemaCreationError(f"Unknown type: {field_type}")
+    return FIELD_MAP[field_type]
 
 
 def _get_pyarrow_schema(

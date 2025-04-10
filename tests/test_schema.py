@@ -13,24 +13,9 @@ import pytest
 from annotated_types import Gt
 from packaging import version
 from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
-from pydantic.types import (
-    UUID1,
-    UUID3,
-    UUID4,
-    UUID5,
-    AwareDatetime,
-    NaiveDatetime,
-    PositiveInt,
-    StrictBool,
-    StrictBytes,
-    StrictFloat,
-    StrictInt,
-    StrictStr,
-    condecimal,
-)
-from typing_extensions import Annotated
-
+from pydantic.types import UUID1, UUID3, UUID4, UUID5, AwareDatetime, NaiveDatetime, PositiveInt, StrictBool, StrictBytes, StrictFloat, StrictInt, StrictStr, condecimal  # NOQA
 from pydantic_to_pyarrow import SchemaCreationError, get_pyarrow_schema
+from typing_extensions import Annotated
 
 
 def _write_pq_and_read(
@@ -112,9 +97,8 @@ def test_unknown_type() -> None:
     class SimpleModel(BaseModel):
         a: Deque[int]
 
-    with pytest.raises(SchemaCreationError) as err:
-        get_pyarrow_schema(SimpleModel)
-    assert "Unknown type" in str(err)
+    schema = get_pyarrow_schema(SimpleModel)
+    assert schema.field('a').type == pa.binary()
 
 
 def test_positive_ints() -> None:
