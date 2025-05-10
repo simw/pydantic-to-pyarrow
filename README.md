@@ -80,7 +80,23 @@ Enum of str | pa.dictionary(pa.int32(), pa.string()) |
 Enum of int | pa.int64() |
 UUID (uuid.UUID or pydantic.types.UUID*) | pa.uuid() | SEE NOTE BELOW!
 
-Note on UUIDs: the UUID type is only supported in pyarrow 18.0 and above. However,
+By default, all other types will produce a SchemaCreationError. However, if you want
+other types to be converted to pa.binary(), then you have two options:
+
+- Set `model_config = ConfigDict(arbitrary_types_allowed=True)` on the model. As well
+as making pydantic accept arbitrary types, this will make this library convert
+those arbitrary types (and other types this library does not understand) to `pa.binary()`.
+- Call `get_pyarrow_schema` with `arbitrary_types_allowed=True`. This case will cover
+types that regular pydantic understands but that this library does not know how
+to convert (yet).
+
+If either of those are True, then arbitrary types will be converted to pa.binary() fields.
+To force no conversion to `pa.binary()`, then call `get_pyarrow_schema` with
+`arbitrary_types_allowed=False`.
+
+### Note on UUIDs
+
+The UUID type is only supported in pyarrow 18.0 and above. However,
 as of pyarrow 19.0, when pyarrow creates a table in eg `pa.Table.from_pylist(objs, schema=schema)`,
 it expects bytes not a uuid.UUID type. Hence, if you are using .model_dump() to create
 the data for pyarrow, you need to add a serializer on your pydantic model to convert to bytes.

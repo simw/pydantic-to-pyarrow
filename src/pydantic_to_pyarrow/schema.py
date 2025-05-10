@@ -22,6 +22,7 @@ class Settings(NamedTuple):
     allow_losing_tz: bool
     by_alias: bool
     exclude_fields: bool
+    arbitrary_types_allowed: Optional[bool]
 
 
 FIELD_MAP = {
@@ -84,6 +85,7 @@ def _get_literal_type(
     field_type: Type[Any],
     _metadata: List[Any],
     _settings: Settings,
+    _arbitrary_types_allowed: bool,
 ) -> pa.DataType:
     values = get_args(field_type)
     if all(isinstance(value, str) for value in values):
@@ -101,18 +103,22 @@ def _get_list_type(
     field_type: Type[Any],
     metadata: List[Any],
     settings: Settings,
+    arbitrary_types_allowed: bool,
 ) -> pa.DataType:
     sub_type = get_args(field_type)[0]
     if _is_optional(sub_type):
         # pyarrow lists can have null elements in them
         sub_type = list(set(get_args(sub_type)) - {type(None)})[0]
-    return pa.list_(_get_pyarrow_type(sub_type, metadata, settings))
+    return pa.list_(
+        _get_pyarrow_type(sub_type, metadata, settings, arbitrary_types_allowed)
+    )
 
 
 def _get_annotated_type(
     field_type: Type[Any],
     metadata: List[Any],
     settings: Settings,
+    arbitrary_types_allowed: bool,
 ) -> pa.DataType:
     # TODO: fix / clean up / understand why / if this works in all cases
     args = get_args(field_type)[1:]
@@ -121,18 +127,19 @@ def _get_annotated_type(
     ]
     metadata = [item for sublist in metadatas for item in sublist]
     field_type = cast(Type[Any], get_args(field_type)[0])
-    return _get_pyarrow_type(field_type, metadata, settings)
+    return _get_pyarrow_type(field_type, metadata, settings, arbitrary_types_allowed)
 
 
 def _get_dict_type(
     field_type: Type[Any],
     metadata: List[Any],
     settings: Settings,
+    arbitrary_types_allowed: bool,
 ) -> pa.DataType:
     key_type, value_type = get_args(field_type)
     return pa.map_(
-        _get_pyarrow_type(key_type, metadata, settings),
-        _get_pyarrow_type(value_type, metadata, settings),
+        _get_pyarrow_type(key_type, metadata, settings, arbitrary_types_allowed),
+        _get_pyarrow_type(value_type, metadata, settings, arbitrary_types_allowed),
     )
 
 
@@ -186,10 +193,8 @@ def _get_pyarrow_type(  # noqa: PLR0911
     field_type: Type[Any],
     metadata: List[Any],
     settings: Settings,
+    arbitrary_types_allowed: bool,
 ) -> pa.DataType:
-    if field_type in FIELD_MAP:
-        return FIELD_MAP[field_type]
-
     if field_type is uuid.UUID:
         return _get_uuid_type()
 
@@ -212,6 +217,7 @@ def _get_pyarrow_type(  # noqa: PLR0911
             field_type,
             metadata,
             settings,
+            arbitrary_types_allowed,
         )
 
     # isinstance(filed_type, type) checks whether it's a class
@@ -219,7 +225,13 @@ def _get_pyarrow_type(  # noqa: PLR0911
     if isinstance(field_type, type) and issubclass(field_type, BaseModel):
         return _get_pyarrow_schema(field_type, settings, as_schema=False)
 
-    raise SchemaCreationError(f"Unknown type: {field_type}")
+    convert_to_binary = settings.arbitrary_types_allowed or (
+        settings.arbitrary_types_allowed is None and arbitrary_types_allowed
+    )
+    if field_type not in FIELD_MAP and convert_to_binary:
+        return pa.binary()
+
+    return FIELD_MAP[field_type]
 
 
 def _get_pyarrow_schema(
@@ -228,6 +240,9 @@ def _get_pyarrow_schema(
     as_schema: bool = True,
 ) -> pa.Schema:
     fields = []
+    arbitrary_types_allowed = pydantic_class.model_config.get(
+        "arbitrary_types_allowed", False
+    )
     for name, field_info in pydantic_class.model_fields.items():
         if field_info.exclude and settings.exclude_fields:
             continue
@@ -248,7 +263,9 @@ def _get_pyarrow_schema(
                 # mypy infers field_type as Type[Any] | None here, hence casting
                 field_type = cast(Type[Any], types_under_union[0])
 
-            pa_field = _get_pyarrow_type(field_type, metadata, settings)
+            pa_field = _get_pyarrow_type(
+                field_type, metadata, settings, arbitrary_types_allowed
+            )
         except Exception as err:  # noqa: BLE001 - ignore blind exception
             raise SchemaCreationError(
                 f"Error processing field {name}: {field_type}, {err}"
@@ -269,6 +286,7 @@ def get_pyarrow_schema(
     allow_losing_tz: bool = False,
     exclude_fields: bool = False,
     by_alias: bool = False,
+    arbitrary_types_allowed: Optional[bool] = None,
 ) -> pa.Schema:
     """
     Converts a Pydantic model into a PyArrow schema.
@@ -281,6 +299,11 @@ def get_pyarrow_schema(
             model that have `Field(exclude=True)`. Defaults to False.
         by_alias (bool, optional): If True, will create the pyarrow schema using the
             (serialization) alias in the pydantic model. Defaults to False.
+        arbitrary_types_allowed (bool, optional): If True, then all unknown types
+            will be converted to binary. Defaults to False. This is similar to the
+            effect of setting model_config arbitrary_types_allowed=True, except
+            that it will now apply across all types that this library does not
+            understand.
 
     Returns:
         pa.Schema: The PyArrow schema representing the Pydantic model.
@@ -289,5 +312,6 @@ def get_pyarrow_schema(
         allow_losing_tz=allow_losing_tz,
         by_alias=by_alias,
         exclude_fields=exclude_fields,
+        arbitrary_types_allowed=arbitrary_types_allowed,
     )
     return _get_pyarrow_schema(pydantic_class, settings)
