@@ -13,9 +13,24 @@ import pytest
 from annotated_types import Gt
 from packaging import version
 from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
-from pydantic.types import UUID1, UUID3, UUID4, UUID5, AwareDatetime, NaiveDatetime, PositiveInt, StrictBool, StrictBytes, StrictFloat, StrictInt, StrictStr, condecimal  # NOQA
-from pydantic_to_pyarrow import SchemaCreationError, get_pyarrow_schema
+from pydantic.types import (
+    UUID1,
+    UUID3,
+    UUID4,
+    UUID5,
+    AwareDatetime,
+    NaiveDatetime,
+    PositiveInt,
+    StrictBool,
+    StrictBytes,
+    StrictFloat,
+    StrictInt,
+    StrictStr,
+    condecimal,
+)  # NOQA
 from typing_extensions import Annotated
+
+from pydantic_to_pyarrow import SchemaCreationError, get_pyarrow_schema
 
 
 def _write_pq_and_read(
@@ -97,8 +112,27 @@ def test_unknown_type() -> None:
     class SimpleModel(BaseModel):
         a: Deque[int]
 
+    with pytest.raises(SchemaCreationError) as err:
+        get_pyarrow_schema(SimpleModel)
+    assert "Deque[int]" in str(err)
+
+
+def test_unknown_type_with_model_arbitrary_types_allowed() -> None:
+    class SimpleModel(BaseModel):
+        model_config = ConfigDict(arbitrary_types_allowed=True)
+
+        a: Deque[int]
+
     schema = get_pyarrow_schema(SimpleModel)
-    assert schema.field('a').type == pa.binary()
+    assert schema.field("a").type == pa.binary()
+
+
+def test_unknown_type_with_global_arbitrary_types_allowed() -> None:
+    class SimpleModel(BaseModel):
+        a: Deque[int]
+
+    schema = get_pyarrow_schema(SimpleModel, arbitrary_types_allowed=True)
+    assert schema.field("a").type == pa.binary()
 
 
 def test_positive_ints() -> None:
