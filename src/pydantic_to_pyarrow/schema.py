@@ -22,7 +22,7 @@ class Settings(NamedTuple):
     allow_losing_tz: bool
     by_alias: bool
     exclude_fields: bool
-    arbitrary_types_allowed: bool
+    arbitrary_types_allowed: Optional[bool]
 
 
 FIELD_MAP = {
@@ -225,9 +225,10 @@ def _get_pyarrow_type(  # noqa: PLR0911
     if isinstance(field_type, type) and issubclass(field_type, BaseModel):
         return _get_pyarrow_schema(field_type, settings, as_schema=False)
 
-    if field_type not in FIELD_MAP and (
-        arbitrary_types_allowed or settings.arbitrary_types_allowed
-    ):
+    convert_to_binary = settings.arbitrary_types_allowed or (
+        settings.arbitrary_types_allowed is None and arbitrary_types_allowed
+    )
+    if field_type not in FIELD_MAP and convert_to_binary:
         return pa.binary()
 
     return FIELD_MAP[field_type]
@@ -285,7 +286,7 @@ def get_pyarrow_schema(
     allow_losing_tz: bool = False,
     exclude_fields: bool = False,
     by_alias: bool = False,
-    arbitrary_types_allowed: bool = False,
+    arbitrary_types_allowed: Optional[bool] = None,
 ) -> pa.Schema:
     """
     Converts a Pydantic model into a PyArrow schema.

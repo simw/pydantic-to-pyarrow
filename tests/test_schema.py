@@ -120,11 +120,20 @@ def test_unknown_type() -> None:
 def test_unknown_type_with_model_arbitrary_types_allowed() -> None:
     class SimpleModel(BaseModel):
         model_config = ConfigDict(arbitrary_types_allowed=True)
-
         a: Deque[int]
 
     schema = get_pyarrow_schema(SimpleModel)
     assert schema.field("a").type == pa.binary()
+
+
+def test_unknown_type_global_setting_overrides_config() -> None:
+    class SimpleModel(BaseModel):
+        model_config = ConfigDict(arbitrary_types_allowed=True)
+        a: Deque[int]
+
+    with pytest.raises(SchemaCreationError) as err:
+        get_pyarrow_schema(SimpleModel, arbitrary_types_allowed=False)
+    assert "Deque[int]" in str(err)
 
 
 def test_unknown_type_with_global_arbitrary_types_allowed() -> None:
