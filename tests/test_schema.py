@@ -12,7 +12,7 @@ import pydantic
 import pytest
 from annotated_types import Gt
 from packaging import version
-from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
+from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, computed_field
 from pydantic.types import (
     UUID1,
     UUID3,
@@ -739,3 +739,57 @@ def test_alias_generator() -> None:
 
     actual_by_alias = get_pyarrow_schema(AliasModel, by_alias=True)
     assert actual_by_alias == expected_by_alias
+
+
+def test_computed_field_decimal() -> None:
+    class ComputedModel(BaseModel):
+        num: Annotated[Decimal, Field(max_digits=10, decimal_places=2)]
+
+        @computed_field
+        @property
+        def num_doubled(
+            self,
+        ) -> Annotated[Decimal, Field(max_digits=10, decimal_places=2)]:
+            return self.num * 2
+
+    expected = pa.schema(
+        [
+            pa.field("num", pa.decimal128(10, 2), nullable=False),
+            pa.field("num_doubled", pa.decimal128(10, 2), nullable=False),
+        ]
+    )
+
+    actual = get_pyarrow_schema(ComputedModel)
+    assert actual == expected
+
+
+def test_computed_field() -> None:
+    class ComputedByAliasModel(BaseModel):
+        model_config = ConfigDict(alias_generator=lambda field_name: field_name.upper())
+        name: str
+        value: int
+
+        @computed_field
+        @property
+        def upper_name(self) -> str:
+            return self.name.upper()
+
+    expected_no_alias = pa.schema(
+        [
+            pa.field("name", pa.string(), nullable=False),
+            pa.field("value", pa.int64(), nullable=False),
+            pa.field("upper_name", pa.string(), nullable=False),
+        ]
+    )
+    actual_no_alias = get_pyarrow_schema(ComputedByAliasModel, by_alias=False)
+    assert actual_no_alias == expected_no_alias
+
+    expected_alias = pa.schema(
+        [
+            pa.field("NAME", pa.string(), nullable=False),
+            pa.field("VALUE", pa.int64(), nullable=False),
+            pa.field("UPPER_NAME", pa.string(), nullable=False),
+        ]
+    )
+    actual_alias = get_pyarrow_schema(ComputedByAliasModel, by_alias=True)
+    assert actual_alias == expected_alias

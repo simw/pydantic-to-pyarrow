@@ -122,7 +122,7 @@ of timezone-aware python datetimes to non-timezone aware pyarrow timestamps
 (defaults to False - and loss of timezone information will raise an exception).
 
 By default, `get_pyarrow_schema` will use the field names for the pyarrow schema fields. If
-`by_alias=True` is supplied, then the serialization_alias is used. More information about aliases is available in the [Pydantic documentation](https://docs.pydantic.dev/latest/concepts/alias/).
+`by_alias=True` is supplied, then the serialization_alias is used (or `alias` for computed fields). More information about aliases is available in the [Pydantic documentation](https://docs.pydantic.dev/latest/concepts/alias/).
 
 ## An Example
 

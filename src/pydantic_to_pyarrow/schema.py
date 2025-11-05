@@ -3,11 +3,13 @@ import types
 import uuid
 from decimal import Decimal
 from enum import EnumMeta
+from itertools import chain
 from typing import Any, List, Literal, NamedTuple, Optional, Type, TypeVar, Union, cast
 
 import pyarrow as pa  # type: ignore
 from annotated_types import Ge, Gt
 from pydantic import AwareDatetime, BaseModel, NaiveDatetime
+from pydantic.fields import ComputedFieldInfo
 from typing_extensions import Annotated, get_args, get_origin
 
 BaseModelType = TypeVar("BaseModelType", bound=BaseModel)
@@ -228,17 +230,27 @@ def _get_pyarrow_schema(
     as_schema: bool = True,
 ) -> pa.Schema:
     fields = []
-    for name, field_info in pydantic_class.model_fields.items():
-        if field_info.exclude and settings.exclude_fields:
-            continue
-        field_type = field_info.annotation
-        metadata = field_info.metadata
 
-        if field_type is None:
+    for name, field_info in chain(
+        pydantic_class.model_fields.items(),
+        pydantic_class.model_computed_fields.items(),
+    ):
+        is_computed = isinstance(field_info, ComputedFieldInfo)
+
+        if not is_computed and field_info.exclude and settings.exclude_fields:
+            continue
+
+        if is_computed:
+            field_type = field_info.return_type
+            metadata: List[Any] = []
+        else:
+            field_type = field_info.annotation
+            metadata = field_info.metadata
+
+        if field_type is None:  # pragma: no cover
             # Not sure how to get here through pydantic, hence nocover
-            raise SchemaCreationError(
-                f"Missing type for field {name}"
-            )  # pragma: no cover
+            field_kind = "computed field" if is_computed else "field"
+            raise SchemaCreationError(f"Missing type for {field_kind} {name}")
 
         try:
             nullable = False
@@ -250,13 +262,21 @@ def _get_pyarrow_schema(
 
             pa_field = _get_pyarrow_type(field_type, metadata, settings)
         except Exception as err:  # noqa: BLE001 - ignore blind exception
+            field_kind = "computed field" if is_computed else "field"
             raise SchemaCreationError(
-                f"Error processing field {name}: {field_type}, {err}"
+                f"Error processing {field_kind} {name}: {field_type}, {err}"
             ) from err
 
         serialized_name = name
-        if settings.by_alias and field_info.serialization_alias is not None:
-            serialized_name = field_info.serialization_alias
+        if settings.by_alias:
+            alias = (
+                field_info.alias
+                if is_computed
+                else field_info.serialization_alias
+            )
+            if alias is not None:
+                serialized_name = alias
+
         fields.append(pa.field(serialized_name, pa_field, nullable=nullable))
 
     if as_schema:
